@@ -157,6 +157,10 @@ app.get('/users/:id/profiles', (req, res) => {
   );
 });
 
+app.get('/api/test', (req, res) => {
+  res.json({ message: 'Hello from your Node.js API!' });
+});
+
 
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
