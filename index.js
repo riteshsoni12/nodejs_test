@@ -11,10 +11,10 @@ app.use(express.json());
 
 // MySQL connection
 const db = mysql.createConnection({
-  host: 'srv1858.hstgr.io',
-  user: 'u206733426_illset_user',
-  password: 'h>a?O^I@U3',
-  database: 'u206733426_illset_api'
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASS,
+  database: process.env.DB_NAME
 });
 
 db.connect(err => {
