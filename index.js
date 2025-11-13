@@ -162,6 +162,48 @@ app.get('/api/test', (req, res) => {
 });
 
 
+// === Login API ===
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body;
+
+  if (username === 'admin' && password === '12345') {
+    res.json({
+      status: 'success',
+      message: 'Login successful',
+      token: 'abc123xyz'
+    });
+  } else {
+    res.status(401).json({
+      status: 'error',
+      message: 'Invalid username or password'
+    });
+  }
+});
+
+// === User Info API ===
+app.get('/api/user/:id', (req, res) => {
+  const { id } = req.params;
+
+  const fakeUsers = {
+    1: { id: 1, name: 'John Doe', email: 'john@example.com' },
+    2: { id: 2, name: 'Jane Smith', email: 'jane@example.com' }
+  };
+
+  const user = fakeUsers[id];
+
+  if (user) {
+    res.json({
+      status: 'success',
+      user
+    });
+  } else {
+    res.status(404).json({
+      status: 'error',
+      message: 'User not found'
+    });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });
