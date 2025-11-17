@@ -1,13 +1,30 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
+const mysql = require("mysql2/promise");
 
 const app = express();
 app.use(express.json());
 
-const JWT_SECRET = "OsCkXG75VhqWo"; // change this
+const JWT_SECRET = "OsCkXG75VhqWo";
+
+// --------------------------------------------
+// MySQL Connection (Hostinger DB via Render)
+// --------------------------------------------
+const db = mysql.createPool({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASS,
+    database: process.env.DB_NAME
+});
+
+// Test DB connection
+db.getConnection()
+    .then(() => console.log("MySQL connected successfully"))
+    .catch(err => console.error("DB connection failed:", err.message));
+
 
 // ------------------------------------------------
-// 1️ API: Generate Token (NO LOGIN REQUIRED)
+// 1️ Generate JWT Token
 // ------------------------------------------------
 app.post("/generate-token", (req, res) => {
     try {
@@ -41,6 +58,7 @@ app.post("/generate-token", (req, res) => {
     }
 });
 
+
 // ------------------------------------------------
 // Middleware: Validate Token
 // ------------------------------------------------
@@ -58,7 +76,7 @@ function verifyToken(req, res, next) {
 
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
-        req.user = decoded; // store decoded data
+        req.user = decoded;
         next();
     } catch (error) {
         return res.status(403).json({
@@ -68,8 +86,9 @@ function verifyToken(req, res, next) {
     }
 }
 
+
 // ------------------------------------------------
-// 2️ API: Get User Profile (Requires Token)
+// 2️ User Profile (Protected)
 // ------------------------------------------------
 app.get("/user-profile", verifyToken, (req, res) => {
     return res.json({
@@ -84,7 +103,7 @@ app.get("/user-profile", verifyToken, (req, res) => {
 });
 
 // ------------------------------------------------
-// 3️ API: Get Products (Requires Token)
+// 3️ Products (Protected)
 // ------------------------------------------------
 app.get("/products", verifyToken, (req, res) => {
     return res.json({
@@ -95,6 +114,29 @@ app.get("/products", verifyToken, (req, res) => {
         ]
     });
 });
+
+// ------------------------------------------------
+// 4️ GET USERS FROM HOSTINGER DATABASE (Protected)
+// ------------------------------------------------
+app.get("/users", verifyToken, async (req, res) => {
+    try {
+        const [rows] = await db.query("SELECT * FROM users");
+
+        return res.json({
+            status: "success",
+            count: rows.length,
+            users: rows
+        });
+
+    } catch (err) {
+        return res.status(500).json({
+            status: "error",
+            message: "Database error",
+            error: err.message
+        });
+    }
+});
+
 
 // ------------------------------------------------
 app.listen(3000, () => console.log("API running on http://localhost:3000"));
