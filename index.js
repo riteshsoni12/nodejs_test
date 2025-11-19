@@ -240,5 +240,70 @@ app.post("/api/signup", async (req, res) => {
     }
 });
 
+
+// ------------------------------------------------
+// LOGIN API (MINIMAL RESPONSE)
+// ------------------------------------------------
+app.post("/login", async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        // 1. Validation
+        if (!email || !password) {
+            return res.status(400).json({
+                status: "failed",
+                message: "email and password are required"
+            });
+        }
+
+        // 2. Check if user exists
+        const [users] = await db.query(
+            "SELECT * FROM users WHERE email = ? LIMIT 1",
+            [email]
+        );
+
+        if (users.length === 0) {
+            return res.status(400).json({
+                status: "failed",
+                message: "Invalid email or password"
+            });
+        }
+
+        const user = users[0];
+
+        // 3. Check password
+        const passwordMatch = await bcrypt.compare(password, user.password);
+
+        if (!passwordMatch) {
+            return res.status(400).json({
+                status: "failed",
+                message: "Invalid email or password"
+            });
+        }
+
+        // 4. Generate JWT token
+        const token = jwt.sign(
+            { user_id: user.id },
+            JWT_SECRET,
+            { expiresIn: "2h" }
+        );
+
+        // ✔ 5. Minimal response
+        return res.json({
+            status: "success",
+            message: "Login successful",
+            token
+        });
+
+    } catch (err) {
+        console.log("Login Error:", err);
+        return res.status(500).json({
+            status: "error",
+            message: "Server error",
+            error: err.message
+        });
+    }
+});
+
 // ------------------------------------------------
 app.listen(3000, () => console.log("API running on http://localhost:3000"));
