@@ -305,5 +305,97 @@ app.post("/api/login", async (req, res) => {
     }
 });
 
+// -------------------------------
+// SAVE or UPDATE EPK
+// -------------------------------
+app.post("/api/epk", verifyToken, async (req, res) => {
+    try {
+        const {
+            user_id,
+            logo,
+            banner,
+            images,
+            videos,
+            bio,
+            website_url,
+            instagram_url,
+            facebook_url,
+            youtube_url,
+            spotify_url,
+            pk_url,
+            other_url
+        } = req.body;
+
+        // Make sure the user updates ONLY their own EPK
+        if (req.user.user_id !== user_id) {
+            return res.status(403).json({
+                success: false,
+                message: "Unauthorized: You can update only your own EPK"
+            });
+        }
+
+        if (!user_id) {
+            return res.status(400).json({ success: false, message: "user_id is required" });
+        }
+
+        const [existing] = await db.execute(
+            "SELECT id FROM epk WHERE user_id = ? LIMIT 1",
+            [user_id]
+        );
+
+        if (existing.length > 0) {
+            // UPDATE
+            const epkId = existing[0].id;
+
+            await db.execute(
+                `UPDATE epk SET 
+                    logo = ?, banner = ?, images = ?, videos = ?, bio = ?, 
+                    website_url = ?, instagram_url = ?, facebook_url = ?, youtube_url = ?, 
+                    spotify_url = ?, pk_url = ?, other_url = ?, updated_at = NOW()
+                WHERE user_id = ?`,
+                [
+                    logo, banner, images, videos, bio,
+                    website_url, instagram_url, facebook_url, youtube_url,
+                    spotify_url, pk_url, other_url, user_id
+                ]
+            );
+
+            return res.json({
+                success: true,
+                message: "EPK updated successfully",
+                epk_id: epkId
+            });
+
+        } else {
+            // INSERT
+            const [result] = await db.execute(
+                `INSERT INTO epk 
+                (user_id, logo, banner, images, videos, bio, website_url, instagram_url, facebook_url, 
+                 youtube_url, spotify_url, pk_url, other_url, created_at, updated_at) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+                [
+                    user_id, logo, banner, images, videos, bio,
+                    website_url, instagram_url, facebook_url, youtube_url,
+                    spotify_url, pk_url, other_url
+                ]
+            );
+
+            return res.json({
+                success: true,
+                message: "EPK saved successfully",
+                epk_id: result.insertId
+            });
+        }
+
+    } catch (error) {
+        console.error("EPK Save Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: error.message
+        });
+    }
+});
+
 // ------------------------------------------------
 app.listen(3000, () => console.log("API running on http://localhost:3000"));
