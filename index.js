@@ -25,7 +25,7 @@ db.getConnection()
 
 
 // ------------------------------------------------
-// 1️ Generate JWT Token
+// Generate JWT Token
 // ------------------------------------------------
 app.post("/generate-token", (req, res) => {
     try {
@@ -87,39 +87,10 @@ function verifyToken(req, res, next) {
     }
 }
 
-
 // ------------------------------------------------
-// 2️ User Profile (Protected)
+// GET USERS FROM HOSTINGER DATABASE (Protected)
 // ------------------------------------------------
-app.get("/user-profile", verifyToken, (req, res) => {
-    return res.json({
-        status: "success",
-        message: "User profile data",
-        data: {
-            user_id: req.user.user_id,
-            name: "John Doe",
-            email: "john@example.com"
-        }
-    });
-});
-
-// ------------------------------------------------
-// 3️ Products (Protected)
-// ------------------------------------------------
-app.get("/products", verifyToken, (req, res) => {
-    return res.json({
-        status: "success",
-        products: [
-            { id: 1, name: "Product One", price: 100 },
-            { id: 2, name: "Product Two", price: 200 }
-        ]
-    });
-});
-
-// ------------------------------------------------
-// 4️ GET USERS FROM HOSTINGER DATABASE (Protected)
-// ------------------------------------------------
-app.get("/users", verifyToken, async (req, res) => {
+app.get("/api/users", verifyToken, async (req, res) => {
     try {
         const [rows] = await db.query("SELECT * FROM users");
 
