@@ -397,10 +397,11 @@ app.post("/api/epk", verifyToken, async (req, res) => {
     }
 });
 
-// -------------------
-// GET EPK by User ID
-// -------------------
-app.get("/api/epk/:user_id", verifyToken, async (req, res) => {
+
+// -------------------------------------------
+// GET EPK by user_id (Protected by verifyToken)
+// -------------------------------------------
+app.get("/epk/:user_id", verifyToken, async (req, res) => {
     try {
         const user_id = req.params.user_id;
 
@@ -415,26 +416,28 @@ app.get("/api/epk/:user_id", verifyToken, async (req, res) => {
         }
 
         // ------------------------
-        // 2. Fetch from database
+        // 2. Fetch EPK from database
         // ------------------------
-        // Example: Replace with your real DB query
-        const epkData = await getEPKByUserId(user_id);
+        const [rows] = await db.query(
+            "SELECT * FROM epk WHERE user_id = ?",
+            [user_id]
+        );
 
-        // If no EPK found
-        if (!epkData) {
+        // No EPK found for user
+        if (rows.length === 0) {
             return res.status(404).json({
                 success: false,
-                message: "EPK not found for this user"
+                message: "No EPK found for this user_id"
             });
         }
 
         // ------------------------
-        // 3. Success Response
+        // 3. Success
         // ------------------------
         return res.status(200).json({
             success: true,
             message: "EPK fetched successfully",
-            data: epkData
+            data: rows[0]
         });
 
     } catch (error) {
@@ -442,10 +445,11 @@ app.get("/api/epk/:user_id", verifyToken, async (req, res) => {
 
         return res.status(500).json({
             success: false,
-            message: "Internal Server Error",
+            message: "Internal Server Error"
         });
     }
 });
+
 
 // ------------------------------------------------
 app.listen(3000, () => console.log("API running on http://localhost:3000"));
