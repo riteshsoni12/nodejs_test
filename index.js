@@ -351,7 +351,7 @@ app.post("/api/epk", verifyToken, async (req, res) => {
                 `UPDATE epk SET 
                     logo = ?, banner = ?, images = ?, videos = ?, bio = ?, 
                     website_url = ?, instagram_url = ?, facebook_url = ?, youtube_url = ?, 
-                    spotify_url = ?, pk_url = ?, other_url = ?, updated_at = NOW()
+                    spotify_url = ?, epk_url = ?, other_url = ?, updated_at = NOW()
                 WHERE user_id = ?`,
                 [
                     logo, banner, images, videos, bio,
@@ -376,7 +376,7 @@ app.post("/api/epk", verifyToken, async (req, res) => {
                 [
                     user_id, logo, banner, images, videos, bio,
                     website_url, instagram_url, facebook_url, youtube_url,
-                    spotify_url, pk_url, other_url
+                    spotify_url, epk_url, other_url
                 ]
             );
 
