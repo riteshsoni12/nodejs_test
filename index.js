@@ -322,7 +322,7 @@ app.post("/api/epk", verifyToken, async (req, res) => {
             facebook_url,
             youtube_url,
             spotify_url,
-            pk_url,
+            epk_url,
             other_url
         } = req.body;
 
