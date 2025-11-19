@@ -356,7 +356,7 @@ app.post("/api/epk", verifyToken, async (req, res) => {
                 [
                     logo, banner, images, videos, bio,
                     website_url, instagram_url, facebook_url, youtube_url,
-                    spotify_url, pk_url, other_url, user_id
+                    spotify_url, epk_url, other_url, user_id
                 ]
             );
 
@@ -371,7 +371,7 @@ app.post("/api/epk", verifyToken, async (req, res) => {
             const [result] = await db.execute(
                 `INSERT INTO epk 
                 (user_id, logo, banner, images, videos, bio, website_url, instagram_url, facebook_url, 
-                 youtube_url, spotify_url, pk_url, other_url, created_at, updated_at) 
+                 youtube_url, spotify_url, epk_url, other_url, created_at, updated_at) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
                 [
                     user_id, logo, banner, images, videos, bio,
