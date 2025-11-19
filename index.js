@@ -244,7 +244,7 @@ app.post("/api/signup", async (req, res) => {
 // ------------------------------------------------
 // LOGIN API (MINIMAL RESPONSE)
 // ------------------------------------------------
-app.post("/login", async (req, res) => {
+app.post("/api/login", async (req, res) => {
     try {
         const { email, password } = req.body;
 
