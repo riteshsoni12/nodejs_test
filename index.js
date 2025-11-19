@@ -401,7 +401,7 @@ app.post("/api/epk", verifyToken, async (req, res) => {
 // -------------------------------------------
 // GET EPK by user_id (Protected by verifyToken)
 // -------------------------------------------
-app.get("/epk/:user_id", verifyToken, async (req, res) => {
+app.get("/api/epk/:user_id", verifyToken, async (req, res) => {
     try {
         const user_id = req.params.user_id;
 
@@ -445,7 +445,8 @@ app.get("/epk/:user_id", verifyToken, async (req, res) => {
 
         return res.status(500).json({
             success: false,
-            message: "Internal Server Error"
+            message: "Internal Server Error",
+            error : error.message
         });
     }
 });
