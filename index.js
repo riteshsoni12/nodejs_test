@@ -423,5 +423,40 @@ app.get("/api/epk/:user_id", verifyToken, async (req, res) => {
 });
 
 
+// -------------------------------------------
+// GET profiles of user (Protected by verifyToken)
+// -------------------------------------------
+app.get("/api/profiles/:user_id", verifyToken, async (req, res) => {
+    try {
+        const { user_id } = req.params;
+
+        if (!user_id) {
+            return res.status(400).json({
+                status: "failed",
+                message: "user_id is required"
+            });
+        }
+
+        // Fetch all profiles except music_lover
+        const [rows] = await db.query(
+            "SELECT * FROM profile WHERE user_id = ? AND account_type != 'music_lover'",
+            [user_id]
+        );
+
+        return res.json({
+            status: "success",
+            count: rows.length,
+            profiles: rows
+        });
+
+    } catch (err) {
+        return res.status(500).json({
+            status: "error",
+            message: "Database error",
+            error: err.message
+        });
+    }
+});
+
 // ------------------------------------------------
 app.listen(3000, () => console.log("API running on http://localhost:3000"));
