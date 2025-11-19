@@ -400,7 +400,7 @@ app.post("/api/epk", verifyToken, async (req, res) => {
 // -------------------
 // GET EPK by User ID
 // -------------------
-app.get("/epk/:user_id", verifyToken, async (req, res) => {
+app.get("/api/epk/:user_id", verifyToken, async (req, res) => {
     try {
         const user_id = req.params.user_id;
 
