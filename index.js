@@ -410,6 +410,7 @@ app.post("/api/epk", verifyToken, async (req, res) => {
     }
 });
 
+
 // -------------------------------------------
 // GET EPK by user_id (Protected by verifyToken)
 // -------------------------------------------
@@ -428,37 +429,61 @@ app.get("/api/epk/:user_id", verifyToken, async (req, res) => {
         }
 
         // ------------------------
-        // 2. Fetch EPK from database
+        // 2. Fetch EPK main data
         // ------------------------
-        const [rows] = await db.query(
+        const [epkRows] = await db.query(
             "SELECT * FROM epk WHERE user_id = ?",
             [user_id]
         );
 
-        // No EPK found for user
-        if (rows.length === 0) {
+        // No EPK created yet
+        if (epkRows.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: "No EPK found for this user_id"
             });
         }
 
+        const epk = epkRows[0];
+        const epkId = epk.id;
+
         // ------------------------
-        // 3. Success
+        // 3. Fetch images
+        // ------------------------
+        const [imageRows] = await db.query(
+            "SELECT url FROM epk_images WHERE epk_id = ?",
+            [epkId]
+        );
+
+        const images = imageRows.map(row => row.url);
+
+        // ------------------------
+        // 4. Fetch videos
+        // ------------------------
+        const [videoRows] = await db.query(
+            "SELECT url FROM epk_videos WHERE epk_id = ?",
+            [epkId]
+        );
+
+        const videos = videoRows.map(row => row.url);
+
+        // ------------------------
+        // 5. Success Response
         // ------------------------
         return res.status(200).json({
             success: true,
             message: "EPK fetched successfully",
-            data: rows[0]
+            epk: epk,
+            images: images,
+            videos: videos
         });
 
     } catch (error) {
         console.error("EPK fetch error:", error);
-
         return res.status(500).json({
             success: false,
             message: "Internal Server Error",
-            error : error.message
+            error: error.message
         });
     }
 });
