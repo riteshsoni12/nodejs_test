@@ -126,7 +126,7 @@ app.post("/api/signup", async (req, res) => {
             preferred_music
         } = req.body;
 
-        // 1. Validate
+        // 1. Validate required fields
         if (!name || !email || !password) {
             return res.status(400).json({
                 status: "failed",
@@ -134,7 +134,7 @@ app.post("/api/signup", async (req, res) => {
             });
         }
 
-        // 2. Check if email already exists
+        // 2. Check for existing email
         const [existingUser] = await db.query(
             "SELECT id FROM users WHERE email = ?",
             [email]
@@ -150,7 +150,7 @@ app.post("/api/signup", async (req, res) => {
         // 3. Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // 4. Insert into users table
+        // 4. Insert user (NO profile creation, NO default profile update)
         const [insertUser] = await db.query(
             `INSERT INTO users 
             (name, email, dob, user_type, password, profile_pic, location, preferred_music, status, created_at, updated_at) 
@@ -168,36 +168,14 @@ app.post("/api/signup", async (req, res) => {
             ]
         );
 
-        const user_id = insertUser.insertId; // newly created user id
+        const user_id = insertUser.insertId;
 
-        // 5. Create default profile (music_lover)
-        const [insertProfile] = await db.query(
-            `INSERT INTO profile (user_id, account_type, email, created_at, updated_at) 
-             VALUES (?, ?, ?, NOW(), NOW())`,
-            [user_id, "music_lover", email]
-        );
-
-        const profile_id = insertProfile.insertId;
-
-        // 6. Update users table with default profile info
-        await db.query(
-            `UPDATE users SET 
-            default_profile_type = ?, 
-            default_profile_id = ?, 
-            status = ?,
-            updated_at = NOW()
-            WHERE id = ?`,
-            ["music_lover", profile_id, "online", user_id]
-        );
-
-        // 7. Return success response
-        return res.json({
+        // 5. Success response
+        return res.status(200).json({
             status: "success",
             message: "Signup successful",
             data: {
-                user_id,
-                default_profile_id: profile_id,
-                default_profile_type: "music_lover"
+                user_id: user_id
             }
         });
 
