@@ -502,5 +502,85 @@ app.get("/api/profiles/:user_id", verifyToken, async (req, res) => {
     }
 });
 
+
+
+// ------------------------------------------------------
+// UPDATE USER PROFILE (Protected by verifyToken)
+// ------------------------------------------------------
+app.put("/api/update-user", verifyToken, async (req, res) => {
+    try {
+        const user_id = req.user.user_id;  // from token
+
+        const {
+            name,
+            email,
+            dob,
+            location,
+            profile_pic,
+            preferred_music
+        } = req.body;
+
+        // Validate
+        if (!name || !email) {
+            return res.status(400).json({
+                success: false,
+                message: "name and email are required"
+            });
+        }
+
+        // Check if email is already taken by another user
+        const [existingEmail] = await db.query(
+            "SELECT id FROM users WHERE email = ? AND id != ?",
+            [email, user_id]
+        );
+
+        if (existingEmail.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Email already exists for another user"
+            });
+        }
+
+        // Build update query dynamically (only update provided fields)
+        const fields = [];
+        const values = [];
+
+        if (name) { fields.push("name = ?"); values.push(name); }
+        if (email) { fields.push("email = ?"); values.push(email); }
+        if (dob) { fields.push("dob = ?"); values.push(dob); }
+        if (location) { fields.push("location = ?"); values.push(location); }
+        if (profile_pic) { fields.push("profile_pic = ?"); values.push(profile_pic); }
+        if (preferred_music) { fields.push("preferred_music = ?"); values.push(preferred_music); }
+
+        fields.push("updated_at = NOW()");
+
+        const sql = `UPDATE users SET ${fields.join(", ")} WHERE id = ?`;
+        values.push(user_id);
+
+        // Execute update
+        await db.query(sql, values);
+
+        // Fetch updated user
+        const [updatedUser] = await db.query(
+            "SELECT id, name, email, dob, location, profile_pic, preferred_music FROM users WHERE id = ?",
+            [user_id]
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Music lover profile updated successfully",
+            data: updatedUser[0]
+        });
+
+    } catch (error) {
+        console.error("Update Music Lover Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error",
+            error: error.message
+        });
+    }
+});
+
 // ------------------------------------------------
 app.listen(3000, () => console.log("API running on http://localhost:3000"));
