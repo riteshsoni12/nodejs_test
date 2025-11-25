@@ -382,30 +382,28 @@ app.post("/api/epk", verifyToken, async (req, res) => {
             epkId = insert.insertId;
         }
 
-        // --------------------------
-        // REPLACE IMAGES TABLE
-        --------------------------
+        // ----------- IMAGES TABLE ------------
         await conn.execute("DELETE FROM epk_images WHERE epk_id = ?", [epkId]);
 
         if (imageList.length > 0) {
-            const imageRows = imageList.map(url => [epkId, url]);
-            await conn.query(
-                "INSERT INTO epk_images (epk_id, url) VALUES ?",
-                [imageRows]
-            );
+            for (const url of imageList) {
+                await conn.execute(
+                    "INSERT INTO epk_images (epk_id, url, created_at) VALUES (?, ?, NOW())",
+                    [epkId, url]
+                );
+            }
         }
 
-        // --------------------------
-        // REPLACE VIDEOS TABLE
-        --------------------------
+        // ----------- VIDEOS TABLE ------------
         await conn.execute("DELETE FROM epk_videos WHERE epk_id = ?", [epkId]);
 
         if (videoList.length > 0) {
-            const videoRows = videoList.map(url => [epkId, url]);
-            await conn.query(
-                "INSERT INTO epk_videos (epk_id, url) VALUES ?",
-                [videoRows]
-            );
+            for (const url of videoList) {
+                await conn.execute(
+                    "INSERT INTO epk_videos (epk_id, url, created_at) VALUES (?, ?, NOW())",
+                    [epkId, url]
+                );
+            }
         }
 
         await conn.commit();
