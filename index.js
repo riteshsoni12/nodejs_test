@@ -276,27 +276,19 @@ app.post("/api/login", async (req, res) => {
     }
 });
 
+
 // -------------------------------
-// SAVE or UPDATE EPK (Final Version)
+// SAVE or UPDATE EPK
 // -------------------------------
 app.post("/api/epk", verifyToken, async (req, res) => {
-
-    if (!req.headers.authorization) {
-        return res.status(401).json({
-            status: "failed",
-            message: "Token is missing"
-        });
-    }
-
     const conn = await db.getConnection();
-
     try {
         const {
             user_id,
             logo,
             banner,
-            images = "",
-            videos = "",
+            images,
+            videos,
             bio,
             website_url,
             instagram_url,
@@ -307,10 +299,7 @@ app.post("/api/epk", verifyToken, async (req, res) => {
             other_url
         } = req.body;
 
-        // ----------------------
-        // VALIDATION
-        ----------------------
-
+        // -------- VALIDATIONS ---------
         if (!user_id) {
             return res.status(400).json({
                 status: "failed",
@@ -325,15 +314,14 @@ app.post("/api/epk", verifyToken, async (req, res) => {
             });
         }
 
-        // Only allow user to update their own EPK
+        // Ensure user updates their own EPK
         if (req.user.user_id !== user_id) {
             return res.status(403).json({
-                success: false,
+                status: "failed",
                 message: "Unauthorized: You can update only your own EPK"
             });
         }
 
-        // Convert CSV → array
         const imageList = images ? images.split(",") : [];
         const videoList = videos ? videos.split(",") : [];
 
@@ -348,76 +336,70 @@ app.post("/api/epk", verifyToken, async (req, res) => {
         let epkId;
 
         if (existing.length > 0) {
-            // -----------------
-            // UPDATE
-            // -----------------
+            // ----------- UPDATE MAIN EPK TABLE -----------
             epkId = existing[0].id;
 
             await conn.execute(
                 `UPDATE epk SET 
-                    logo=?, banner=?, bio=?, website_url=?, instagram_url=?, facebook_url=?, 
-                    youtube_url=?, spotify_url=?, epk_url=?, other_url=?, updated_at=NOW()
-                WHERE id=?`,
+                    logo = ?, banner = ?, bio = ?, 
+                    website_url = ?, instagram_url = ?, facebook_url = ?, 
+                    youtube_url = ?, spotify_url = ?, epk_url = ?, other_url = ?, 
+                    updated_at = NOW()
+                WHERE user_id = ?`,
                 [
-                    logo, banner, bio, website_url, instagram_url, facebook_url,
-                    youtube_url, spotify_url, epk_url, other_url, epkId
+                    logo, banner, bio,
+                    website_url, instagram_url, facebook_url,
+                    youtube_url, spotify_url, epk_url, other_url,
+                    user_id
                 ]
             );
 
         } else {
-            // -----------------
-            // INSERT
-            -----------------
-            const [insert] = await conn.execute(
-                `INSERT INTO epk
-                (user_id, logo, banner, bio, website_url, instagram_url, facebook_url, youtube_url,
-                 spotify_url, epk_url, other_url, created_at, updated_at)
+            // ----------- INSERT MAIN EPK TABLE -----------
+            const [result] = await conn.execute(
+                `INSERT INTO epk 
+                (user_id, logo, banner, bio, website_url, instagram_url, facebook_url, 
+                 youtube_url, spotify_url, epk_url, other_url, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
                 [
-                    user_id, logo, banner, bio, website_url, instagram_url,
-                    facebook_url, youtube_url, spotify_url, epk_url, other_url
+                    user_id, logo, banner, bio,
+                    website_url, instagram_url, facebook_url,
+                    youtube_url, spotify_url, epk_url, other_url
                 ]
             );
 
-            epkId = insert.insertId;
+            epkId = result.insertId;
         }
 
-        // ----------- IMAGES TABLE ------------
+        // ----------- IMAGES -----------
         await conn.execute("DELETE FROM epk_images WHERE epk_id = ?", [epkId]);
-
-        if (imageList.length > 0) {
-            for (const url of imageList) {
-                await conn.execute(
-                    "INSERT INTO epk_images (epk_id, url, created_at) VALUES (?, ?, NOW())",
-                    [epkId, url]
-                );
-            }
+        for (const url of imageList) {
+            await conn.execute(
+                "INSERT INTO epk_images (epk_id, url, created_at) VALUES (?, ?, NOW())",
+                [epkId, url]
+            );
         }
 
-        // ----------- VIDEOS TABLE ------------
+        // ----------- VIDEOS -----------
         await conn.execute("DELETE FROM epk_videos WHERE epk_id = ?", [epkId]);
-
-        if (videoList.length > 0) {
-            for (const url of videoList) {
-                await conn.execute(
-                    "INSERT INTO epk_videos (epk_id, url, created_at) VALUES (?, ?, NOW())",
-                    [epkId, url]
-                );
-            }
+        for (const url of videoList) {
+            await conn.execute(
+                "INSERT INTO epk_videos (epk_id, url, created_at) VALUES (?, ?, NOW())",
+                [epkId, url]
+            );
         }
 
         await conn.commit();
 
         return res.status(200).json({
             success: true,
-            message: existing.length ? "EPK updated successfully" : "EPK saved successfully",
+            message: existing.length > 0 ? "EPK updated successfully" : "EPK saved successfully",
             epk_id: epkId
         });
 
     } catch (error) {
         await conn.rollback();
         console.error("EPK Save Error:", error);
-
         return res.status(500).json({
             status: "error",
             message: "Server error",
@@ -427,7 +409,6 @@ app.post("/api/epk", verifyToken, async (req, res) => {
         conn.release();
     }
 });
-
 
 // -------------------------------------------
 // GET EPK by user_id (Protected by verifyToken)
