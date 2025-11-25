@@ -483,7 +483,7 @@ app.get("/api/profiles/:user_id", verifyToken, async (req, res) => {
 
         // Fetch all profiles except music_lover
         const [rows] = await db.query(
-            "SELECT * FROM profile WHERE user_id = ? AND account_type != 'music_lover'",
+            "SELECT * FROM profile WHERE user_id = ?",
             [user_id]
         );
 
