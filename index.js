@@ -277,16 +277,26 @@ app.post("/api/login", async (req, res) => {
 });
 
 // -------------------------------
-// SAVE or UPDATE EPK
+// SAVE or UPDATE EPK (Final Version)
 // -------------------------------
 app.post("/api/epk", verifyToken, async (req, res) => {
+
+    if (!req.headers.authorization) {
+        return res.status(401).json({
+            status: "failed",
+            message: "Token is missing"
+        });
+    }
+
+    const conn = await db.getConnection();
+
     try {
         const {
             user_id,
             logo,
             banner,
-            images,
-            videos,
+            images = "",
+            videos = "",
             bio,
             website_url,
             instagram_url,
@@ -297,7 +307,25 @@ app.post("/api/epk", verifyToken, async (req, res) => {
             other_url
         } = req.body;
 
-        // Make sure the user updates ONLY their own EPK
+        // ----------------------
+        // VALIDATION
+        ----------------------
+
+        if (!user_id) {
+            return res.status(400).json({
+                status: "failed",
+                message: "user_id is required"
+            });
+        }
+
+        if (typeof bio !== "string") {
+            return res.status(400).json({
+                status: "failed",
+                message: "bio must be a string"
+            });
+        }
+
+        // Only allow user to update their own EPK
         if (req.user.user_id !== user_id) {
             return res.status(403).json({
                 success: false,
@@ -305,66 +333,100 @@ app.post("/api/epk", verifyToken, async (req, res) => {
             });
         }
 
-        if (!user_id) {
-            return res.status(400).json({ success: false, message: "user_id is required" });
-        }
+        // Convert CSV → array
+        const imageList = images ? images.split(",") : [];
+        const videoList = videos ? videos.split(",") : [];
 
-        const [existing] = await db.execute(
+        await conn.beginTransaction();
+
+        // Check if EPK exists
+        const [existing] = await conn.execute(
             "SELECT id FROM epk WHERE user_id = ? LIMIT 1",
             [user_id]
         );
 
-        if (existing.length > 0) {
-            // UPDATE
-            const epkId = existing[0].id;
+        let epkId;
 
-            await db.execute(
+        if (existing.length > 0) {
+            // -----------------
+            // UPDATE
+            // -----------------
+            epkId = existing[0].id;
+
+            await conn.execute(
                 `UPDATE epk SET 
-                    logo = ?, banner = ?, images = ?, videos = ?, bio = ?, 
-                    website_url = ?, instagram_url = ?, facebook_url = ?, youtube_url = ?, 
-                    spotify_url = ?, epk_url = ?, other_url = ?, updated_at = NOW()
-                WHERE user_id = ?`,
+                    logo=?, banner=?, bio=?, website_url=?, instagram_url=?, facebook_url=?, 
+                    youtube_url=?, spotify_url=?, epk_url=?, other_url=?, updated_at=NOW()
+                WHERE id=?`,
                 [
-                    logo, banner, images, videos, bio,
-                    website_url, instagram_url, facebook_url, youtube_url,
-                    spotify_url, epk_url, other_url, user_id
+                    logo, banner, bio, website_url, instagram_url, facebook_url,
+                    youtube_url, spotify_url, epk_url, other_url, epkId
                 ]
             );
-
-            return res.json({
-                success: true,
-                message: "EPK updated successfully",
-                epk_id: epkId
-            });
 
         } else {
+            // -----------------
             // INSERT
-            const [result] = await db.execute(
-                `INSERT INTO epk 
-                (user_id, logo, banner, images, videos, bio, website_url, instagram_url, facebook_url, 
-                 youtube_url, spotify_url, epk_url, other_url, created_at, updated_at) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+            -----------------
+            const [insert] = await conn.execute(
+                `INSERT INTO epk
+                (user_id, logo, banner, bio, website_url, instagram_url, facebook_url, youtube_url,
+                 spotify_url, epk_url, other_url, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
                 [
-                    user_id, logo, banner, images, videos, bio,
-                    website_url, instagram_url, facebook_url, youtube_url,
-                    spotify_url, epk_url, other_url
+                    user_id, logo, banner, bio, website_url, instagram_url,
+                    facebook_url, youtube_url, spotify_url, epk_url, other_url
                 ]
             );
 
-            return res.json({
-                success: true,
-                message: "EPK saved successfully",
-                epk_id: result.insertId
-            });
+            epkId = insert.insertId;
         }
 
+        // --------------------------
+        // REPLACE IMAGES TABLE
+        --------------------------
+        await conn.execute("DELETE FROM epk_images WHERE epk_id = ?", [epkId]);
+
+        if (imageList.length > 0) {
+            const imageRows = imageList.map(url => [epkId, url]);
+            await conn.query(
+                "INSERT INTO epk_images (epk_id, url) VALUES ?",
+                [imageRows]
+            );
+        }
+
+        // --------------------------
+        // REPLACE VIDEOS TABLE
+        --------------------------
+        await conn.execute("DELETE FROM epk_videos WHERE epk_id = ?", [epkId]);
+
+        if (videoList.length > 0) {
+            const videoRows = videoList.map(url => [epkId, url]);
+            await conn.query(
+                "INSERT INTO epk_videos (epk_id, url) VALUES ?",
+                [videoRows]
+            );
+        }
+
+        await conn.commit();
+
+        return res.status(200).json({
+            success: true,
+            message: existing.length ? "EPK updated successfully" : "EPK saved successfully",
+            epk_id: epkId
+        });
+
     } catch (error) {
+        await conn.rollback();
         console.error("EPK Save Error:", error);
+
         return res.status(500).json({
-            success: false,
+            status: "error",
             message: "Server error",
             error: error.message
         });
+    } finally {
+        conn.release();
     }
 });
 
