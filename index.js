@@ -626,7 +626,7 @@ app.post("/api/profile", verifyToken, async (req, res) => {
 
         // ---------------------------
         // 1. Validate required fields
-        //-----------------------------
+        // ---------------------------
         if (!user_id || !account_type) {
             return res.status(400).json({
                 success: false,
@@ -634,7 +634,7 @@ app.post("/api/profile", verifyToken, async (req, res) => {
             });
         }
 
-        // Only user can modify their own profile
+        // User can update only their own profile
         if (req.user.user_id !== user_id) {
             return res.status(403).json({
                 success: false,
@@ -660,62 +660,65 @@ app.post("/api/profile", verifyToken, async (req, res) => {
         );
 
         // ---------------------------
-        // 3. Build dynamic field list
+        // 3. Build UPDATE field list
         // ---------------------------
-        const fields = [];
-        const values = [];
+        const updateFields = [];
+        const updateValues = [];
 
-        const add = (field, value) => {
-            fields.push(`${field} = ?`);
-            values.push(value);
+        const addUpdate = (column, value) => {
+            if (typeof value !== "undefined") {
+                updateFields.push(`${column} = ?`);
+                updateValues.push(value);
+            }
         };
 
-        add("location", location);
-        add("stage_name", stage_name);
-        add("fee_range", fee_range);
-        add("bio", bio);
-        add("profile_pic", profile_pic);
-        add("banner_pic", banner_pic);
-        add("willing_to_travel", willing_to_travel);
-        add("genre", genre);
-        add("preferred_event_type", preferred_event_type);
-        add("email", email);
-        add("phone", phone);
+        addUpdate("location", location);
+        addUpdate("stage_name", stage_name);
+        addUpdate("fee_range", fee_range);
+        addUpdate("bio", bio);
+        addUpdate("profile_pic", profile_pic);
+        addUpdate("banner_pic", banner_pic);
+        addUpdate("willing_to_travel", willing_to_travel);
+        addUpdate("genre", genre);
+        addUpdate("preferred_event_type", preferred_event_type);
+        addUpdate("email", email);
+        addUpdate("phone", phone);
 
-        // Contact persons
-        add("artist_contact_person", artist_contact_person);
-        add("promoter_contact_person", promoter_contact_person);
-        add("venue_contact_person", venue_contact_person);
-        add("manager_email", manager_email);
-        add("manager_phone", manager_phone);
+        addUpdate("artist_contact_person", artist_contact_person);
+        addUpdate("promoter_contact_person", promoter_contact_person);
+        addUpdate("venue_contact_person", venue_contact_person);
+        addUpdate("manager_email", manager_email);
+        addUpdate("manager_phone", manager_phone);
 
-        // Promoter
-        add("company_name", company_name);
+        addUpdate("company_name", company_name);
 
-        // Venue
-        add("venue_name", venue_name);
-        add("venue_capacity", venue_capacity);
-        add("opening_hours", opening_hours);
-        add("type_of_venue", type_of_venue);
-        add("venue_email", venue_email);
-        add("venue_address", venue_address);
-        add("venue_phone", venue_phone);
-
-        // Common updated_at
-        fields.push("updated_at = NOW()");
+        addUpdate("venue_name", venue_name);
+        addUpdate("venue_capacity", venue_capacity);
+        addUpdate("opening_hours", opening_hours);
+        addUpdate("type_of_venue", type_of_venue);
+        addUpdate("venue_email", venue_email);
+        addUpdate("venue_address", venue_address);
+        addUpdate("venue_phone", venue_phone);
 
         // ---------------------------
-        // 4. UPDATE existing profile
+        // 4. UPDATE if exists
         // ---------------------------
         if (existing.length > 0) {
             const profileId = existing[0].id;
 
+            if (updateFields.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "No fields provided to update"
+                });
+            }
+
             const sql = `
-                UPDATE profile SET ${fields.join(", ")}
+                UPDATE profile SET ${updateFields.join(", ")}, updated_at = NOW()
                 WHERE id = ?
             `;
 
-            await db.query(sql, [...values, profileId]);
+            await db.query(sql, [...updateValues, profileId]);
 
             return res.status(200).json({
                 success: true,
@@ -725,24 +728,54 @@ app.post("/api/profile", verifyToken, async (req, res) => {
         }
 
         // ---------------------------
-        // 5. INSERT new profile
+        // 5. INSERT new profile (FIXED)
         // ---------------------------
-        const insertFields = ["user_id", "account_type"];
-        const insertValues = [user_id, account_type];
+        const insertCols = ["user_id", "account_type"];
+        const insertVals = [user_id, account_type];
 
-        fields.forEach(f => {
-            const fieldName = f.split(" = ")[0];
-            insertFields.push(fieldName);
-        });
+        const maybeAdd = (column, value) => {
+            if (typeof value !== "undefined") {
+                insertCols.push(column);
+                insertVals.push(value);
+            }
+        };
 
-        const placeholders = insertFields.map(() => "?").join(", ");
+        maybeAdd("location", location);
+        maybeAdd("stage_name", stage_name);
+        maybeAdd("fee_range", fee_range);
+        maybeAdd("bio", bio);
+        maybeAdd("profile_pic", profile_pic);
+        maybeAdd("banner_pic", banner_pic);
+        maybeAdd("willing_to_travel", willing_to_travel);
+        maybeAdd("genre", genre);
+        maybeAdd("preferred_event_type", preferred_event_type);
+        maybeAdd("email", email);
+        maybeAdd("phone", phone);
+
+        maybeAdd("artist_contact_person", artist_contact_person);
+        maybeAdd("promoter_contact_person", promoter_contact_person);
+        maybeAdd("venue_contact_person", venue_contact_person);
+        maybeAdd("manager_email", manager_email);
+        maybeAdd("manager_phone", manager_phone);
+
+        maybeAdd("company_name", company_name);
+
+        maybeAdd("venue_name", venue_name);
+        maybeAdd("venue_capacity", venue_capacity);
+        maybeAdd("opening_hours", opening_hours);
+        maybeAdd("type_of_venue", type_of_venue);
+        maybeAdd("venue_email", venue_email);
+        maybeAdd("venue_address", venue_address);
+        maybeAdd("venue_phone", venue_phone);
+
+        const placeholders = insertCols.map(() => "?").join(", ");
 
         const sqlInsert = `
-            INSERT INTO profile (${insertFields.join(", ")}, created_at)
-            VALUES (${placeholders}, NOW())
+            INSERT INTO profile (${insertCols.join(", ")}, created_at, updated_at)
+            VALUES (${placeholders}, NOW(), NOW())
         `;
 
-        const [result] = await db.query(sqlInsert, [...insertValues, ...values]);
+        const [result] = await db.query(sqlInsert, insertVals);
 
         return res.status(200).json({
             success: true,
@@ -759,7 +792,6 @@ app.post("/api/profile", verifyToken, async (req, res) => {
         });
     }
 });
-
 
 // ------------------------------------------------
 app.listen(3000, () => console.log("API running on http://localhost:3000"));
