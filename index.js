@@ -793,5 +793,117 @@ app.post("/api/profile", verifyToken, async (req, res) => {
     }
 });
 
+
+// --------------------------------------------------------------
+// ADD PROFILE MEDIA (images/videos)
+// --------------------------------------------------------------
+app.post("/api/profile/media", verifyToken, async (req, res) => {
+    try {
+        const { profile_id, user_id, media } = req.body;
+
+        /*
+            media = [
+                { media_type: "image", media_url: "img1.jpg" },
+                { media_type: "video", media_url: "video1.mp4" }
+            ]
+        */
+
+        // -----------------------------
+        // 1. Validate Required Fields
+        // -----------------------------
+        if (!profile_id || !user_id || !Array.isArray(media)) {
+            return res.status(400).json({
+                success: false,
+                message: "profile_id, user_id and media array are required"
+            });
+        }
+
+        if (media.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "media array cannot be empty"
+            });
+        }
+
+        // -----------------------------
+        // 2. Check user ownership
+        // -----------------------------
+        const [profile] = await db.query(
+            "SELECT user_id FROM profile WHERE id = ? LIMIT 1",
+            [profile_id]
+        );
+
+        if (profile.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Profile not found"
+            });
+        }
+
+        if (profile[0].user_id !== user_id) {
+            return res.status(403).json({
+                success: false,
+                message: "Unauthorized: You can add media only to your own profile"
+            });
+        }
+
+        // -----------------------------
+        // 3. Insert media entries
+        // -----------------------------
+        const insertValues = [];
+        const placeholders = [];
+
+        for (const item of media) {
+            if (!item.media_type || !item.media_url) continue;
+
+            if (!["image", "video"].includes(item.media_type)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "media_type must be image or video"
+                });
+            }
+
+            placeholders.push("(?, ?, ?, NOW())");
+            insertValues.push(profile_id, item.media_type, item.media_url);
+        }
+
+        if (placeholders.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "No valid media items provided"
+            });
+        }
+
+        const sql = `
+            INSERT INTO profile_media (profile_id, media_type, media_url, created_at)
+            VALUES ${placeholders.join(", ")}
+        `;
+
+        await db.query(sql, insertValues);
+
+        // -----------------------------
+        // 4. Fetch updated media list
+        // -----------------------------
+        const [updatedMedia] = await db.query(
+            "SELECT * FROM profile_media WHERE profile_id = ? ORDER BY id DESC",
+            [profile_id]
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Media uploaded successfully",
+            media: updatedMedia
+        });
+
+    } catch (error) {
+        console.error("Profile Media Save Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: error.message
+        });
+    }
+});
+
 // ------------------------------------------------
 app.listen(3000, () => console.log("API running on http://localhost:3000"));
