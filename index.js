@@ -905,5 +905,105 @@ app.post("/api/profile/media", verifyToken, async (req, res) => {
     }
 });
 
+
+// ---------------------------------------------------------
+// SAVE or UPDATE profile social links (Protected)
+// ---------------------------------------------------------
+app.post("/api/profile/social-links", verifyToken, async (req, res) => {
+    try {
+        const {
+            profile_id,
+            website_url,
+            instagram_url,
+            facebook_url,
+            youtube_url,
+            spotify_url,
+            tiktok_url,
+            twitter_url,
+            other_url
+        } = req.body;
+
+        // -----------------------------------
+        // 1. VALIDATE REQUIRED FIELDS
+        // -----------------------------------
+        if (!profile_id) {
+            return res.status(400).json({
+                success: false,
+                message: "profile_id is required"
+            });
+        }
+
+        // -----------------------------------
+        // 2. CHECK IF SOCIAL LINKS ALREADY EXIST
+        // -----------------------------------
+        const [existing] = await db.query(
+            "SELECT id FROM profile_social_links WHERE profile_id = ?",
+            [profile_id]
+        );
+
+        // -----------------------------------
+        // 3A. UPDATE IF EXISTS
+        // -----------------------------------
+        if (existing.length > 0) {
+            await db.query(
+                `UPDATE profile_social_links 
+                 SET website_url = ?, instagram_url = ?, facebook_url = ?, youtube_url = ?, 
+                     spotify_url = ?, tiktok_url = ?, twitter_url = ?, other_url = ?, updated_at = NOW() 
+                 WHERE profile_id = ?`,
+                [
+                    website_url || null,
+                    instagram_url || null,
+                    facebook_url || null,
+                    youtube_url || null,
+                    spotify_url || null,
+                    tiktok_url || null,
+                    twitter_url || null,
+                    other_url || null,
+                    profile_id
+                ]
+            );
+
+            return res.status(200).json({
+                success: true,
+                message: "Profile social links updated successfully"
+            });
+        }
+
+        // -----------------------------------
+        // 3B. INSERT IF NOT EXISTS
+        // -----------------------------------
+        await db.query(
+            `INSERT INTO profile_social_links (
+                profile_id, website_url, instagram_url, facebook_url, youtube_url,
+                spotify_url, tiktok_url, twitter_url, other_url, created_at, updated_at
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+            [
+                profile_id,
+                website_url || null,
+                instagram_url || null,
+                facebook_url || null,
+                youtube_url || null,
+                spotify_url || null,
+                tiktok_url || null,
+                twitter_url || null,
+                other_url || null
+            ]
+        );
+
+        return res.status(201).json({
+            success: true,
+            message: "Profile social links created successfully"
+        });
+
+    } catch (error) {
+        console.error("Social Links Save Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error",
+            error: error.message
+        });
+    }
+});
+
 // ------------------------------------------------
 app.listen(3000, () => console.log("API running on http://localhost:3000"));
