@@ -503,7 +503,6 @@ app.get("/api/profiles/:user_id", verifyToken, async (req, res) => {
 });
 
 
-
 // ------------------------------------------------------
 // UPDATE USER PROFILE (Protected by verifyToken)
 // ------------------------------------------------------
@@ -568,12 +567,12 @@ app.put("/api/update-user", verifyToken, async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            message: "Music lover profile updated successfully",
+            message: "Profile updated successfully",
             data: updatedUser[0]
         });
 
     } catch (error) {
-        console.error("Update Music Lover Error:", error);
+        console.error("Update Profile Error:", error);
         return res.status(500).json({
             success: false,
             message: "Internal Server Error",
@@ -581,6 +580,186 @@ app.put("/api/update-user", verifyToken, async (req, res) => {
         });
     }
 });
+
+
+// ----------------------------------------------------------
+// SAVE or UPDATE PROFILE (artist, promoter, venue)
+// ----------------------------------------------------------
+app.post("/api/profile", verifyToken, async (req, res) => {
+    try {
+        const {
+            user_id,
+            account_type, // artist | promoter | venue
+
+            // COMMON FIELDS
+            location,
+            stage_name,
+            fee_range,
+            bio,
+            profile_pic,
+            banner_pic,
+            willing_to_travel,
+            genre,
+            preferred_event_type,
+            email,
+            phone,
+
+            // CONTACT FIELDS
+            artist_contact_person,
+            promoter_contact_person,
+            venue_contact_person,
+            manager_email,
+            manager_phone,
+
+            // PROMOTER FIELDS
+            company_name,
+
+            // VENUE FIELDS
+            venue_name,
+            venue_capacity,
+            opening_hours,
+            type_of_venue,
+            venue_email,
+            venue_address,
+            venue_phone
+        } = req.body;
+
+        // ---------------------------
+        // 1. Validate required fields
+        -----------------------------
+        if (!user_id || !account_type) {
+            return res.status(400).json({
+                success: false,
+                message: "user_id and account_type are required"
+            });
+        }
+
+        // Only user can modify their own profile
+        if (req.user.user_id !== user_id) {
+            return res.status(403).json({
+                success: false,
+                message: "Unauthorized: You can update only your own profile"
+            });
+        }
+
+        // Validate account_type
+        const validTypes = ["artist", "promoter", "venue"];
+        if (!validTypes.includes(account_type)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid account_type"
+            });
+        }
+
+        // ---------------------------
+        // 2. Check if profile exists
+        // ---------------------------
+        const [existing] = await db.query(
+            `SELECT id FROM profile WHERE user_id = ? AND account_type = ? LIMIT 1`,
+            [user_id, account_type]
+        );
+
+        // ---------------------------
+        // 3. Build dynamic field list
+        // ---------------------------
+        const fields = [];
+        const values = [];
+
+        const add = (field, value) => {
+            fields.push(`${field} = ?`);
+            values.push(value);
+        };
+
+        add("location", location);
+        add("stage_name", stage_name);
+        add("fee_range", fee_range);
+        add("bio", bio);
+        add("profile_pic", profile_pic);
+        add("banner_pic", banner_pic);
+        add("willing_to_travel", willing_to_travel);
+        add("genre", genre);
+        add("preferred_event_type", preferred_event_type);
+        add("email", email);
+        add("phone", phone);
+
+        // Contact persons
+        add("artist_contact_person", artist_contact_person);
+        add("promoter_contact_person", promoter_contact_person);
+        add("venue_contact_person", venue_contact_person);
+        add("manager_email", manager_email);
+        add("manager_phone", manager_phone);
+
+        // Promoter
+        add("company_name", company_name);
+
+        // Venue
+        add("venue_name", venue_name);
+        add("venue_capacity", venue_capacity);
+        add("opening_hours", opening_hours);
+        add("type_of_venue", type_of_venue);
+        add("venue_email", venue_email);
+        add("venue_address", venue_address);
+        add("venue_phone", venue_phone);
+
+        // Common updated_at
+        fields.push("updated_at = NOW()");
+
+        // ---------------------------
+        // 4. UPDATE existing profile
+        // ---------------------------
+        if (existing.length > 0) {
+            const profileId = existing[0].id;
+
+            const sql = `
+                UPDATE profile SET ${fields.join(", ")}
+                WHERE id = ?
+            `;
+
+            await db.query(sql, [...values, profileId]);
+
+            return res.status(200).json({
+                success: true,
+                message: `${account_type} profile updated successfully`,
+                profile_id: profileId
+            });
+        }
+
+        // ---------------------------
+        // 5. INSERT new profile
+        // ---------------------------
+        const insertFields = ["user_id", "account_type"];
+        const insertValues = [user_id, account_type];
+
+        fields.forEach(f => {
+            const fieldName = f.split(" = ")[0];
+            insertFields.push(fieldName);
+        });
+
+        const placeholders = insertFields.map(() => "?").join(", ");
+
+        const sqlInsert = `
+            INSERT INTO profile (${insertFields.join(", ")}, created_at)
+            VALUES (${placeholders}, NOW())
+        `;
+
+        const [result] = await db.query(sqlInsert, [...insertValues, ...values]);
+
+        return res.status(200).json({
+            success: true,
+            message: `${account_type} profile created successfully`,
+            profile_id: result.insertId
+        });
+
+    } catch (error) {
+        console.error("Profile Save Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: error.message
+        });
+    }
+});
+
 
 // ------------------------------------------------
 app.listen(3000, () => console.log("API running on http://localhost:3000"));
