@@ -626,7 +626,7 @@ app.post("/api/profile", verifyToken, async (req, res) => {
 
         // ---------------------------
         // 1. Validate required fields
-        -----------------------------
+        //-----------------------------
         if (!user_id || !account_type) {
             return res.status(400).json({
                 success: false,
