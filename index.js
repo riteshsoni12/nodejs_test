@@ -906,9 +906,9 @@ app.post("/api/profile/media", verifyToken, async (req, res) => {
 });
 
 
-// ---------------------------------------------------------
-// SAVE or UPDATE profile social links (Protected)
-// ---------------------------------------------------------
+// -----------------------------------------------
+// SAVE / UPDATE SOCIAL LINKS
+// -----------------------------------------------
 app.post("/api/profile/social-links", verifyToken, async (req, res) => {
     try {
         const {
@@ -924,7 +924,7 @@ app.post("/api/profile/social-links", verifyToken, async (req, res) => {
         } = req.body;
 
         // -----------------------------------
-        // 1. VALIDATE REQUIRED FIELDS
+        // 1. Validate input
         // -----------------------------------
         if (!profile_id) {
             return res.status(400).json({
@@ -934,33 +934,60 @@ app.post("/api/profile/social-links", verifyToken, async (req, res) => {
         }
 
         // -----------------------------------
-        // 2. CHECK IF SOCIAL LINKS ALREADY EXIST
+        // 2. Check profile ownership
+        // -----------------------------------
+        const [profile] = await db.query(
+            `SELECT user_id FROM profile WHERE id = ? LIMIT 1`,
+            [profile_id]
+        );
+
+        if (profile.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Profile not found"
+            });
+        }
+
+        // Only owner can update
+        if (profile[0].user_id !== req.user.user_id) {
+            return res.status(403).json({
+                success: false,
+                message: "Unauthorized: You can update only your own social links"
+            });
+        }
+
+        // -----------------------------------
+        // 3. Check if existing social links exist
         // -----------------------------------
         const [existing] = await db.query(
-            "SELECT id FROM profile_social_links WHERE profile_id = ?",
+            `SELECT id FROM profile_social_links WHERE profile_id = ? LIMIT 1`,
             [profile_id]
         );
 
         // -----------------------------------
-        // 3A. UPDATE IF EXISTS
+        // Prepare values for insert/update
+        // -----------------------------------
+        const values = [
+            website_url || null,
+            instagram_url || null,
+            facebook_url || null,
+            youtube_url || null,
+            spotify_url || null,
+            tiktok_url || null,
+            twitter_url || null,
+            other_url || null
+        ];
+
+        // -----------------------------------
+        // 4. UPDATE
         // -----------------------------------
         if (existing.length > 0) {
             await db.query(
                 `UPDATE profile_social_links 
-                 SET website_url = ?, instagram_url = ?, facebook_url = ?, youtube_url = ?, 
-                     spotify_url = ?, tiktok_url = ?, twitter_url = ?, other_url = ?, updated_at = NOW() 
+                 SET website_url=?, instagram_url=?, facebook_url=?, youtube_url=?, 
+                     spotify_url=?, tiktok_url=?, twitter_url=?, other_url=?, updated_at = NOW()
                  WHERE profile_id = ?`,
-                [
-                    website_url || null,
-                    instagram_url || null,
-                    facebook_url || null,
-                    youtube_url || null,
-                    spotify_url || null,
-                    tiktok_url || null,
-                    twitter_url || null,
-                    other_url || null,
-                    profile_id
-                ]
+                [...values, profile_id]
             );
 
             return res.status(200).json({
@@ -970,27 +997,17 @@ app.post("/api/profile/social-links", verifyToken, async (req, res) => {
         }
 
         // -----------------------------------
-        // 3B. INSERT IF NOT EXISTS
+        // 5. INSERT
         // -----------------------------------
         await db.query(
-            `INSERT INTO profile_social_links (
-                profile_id, website_url, instagram_url, facebook_url, youtube_url,
-                spotify_url, tiktok_url, twitter_url, other_url, created_at, updated_at
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-            [
-                profile_id,
-                website_url || null,
-                instagram_url || null,
-                facebook_url || null,
-                youtube_url || null,
-                spotify_url || null,
-                tiktok_url || null,
-                twitter_url || null,
-                other_url || null
-            ]
+            `INSERT INTO profile_social_links 
+                (profile_id, website_url, instagram_url, facebook_url, youtube_url, 
+                 spotify_url, tiktok_url, twitter_url, other_url, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+            [profile_id, ...values]
         );
 
-        return res.status(201).json({
+        return res.status(200).json({
             success: true,
             message: "Profile social links created successfully"
         });
