@@ -1430,6 +1430,9 @@ app.post("/api/event-media", verifyToken, async (req, res) => {
     try {
         const { event_id, images, videos, banner_image } = req.body;
 
+        // -----------------------------
+        // REQUIRED FIELD CHECK
+        // -----------------------------
         if (!event_id) {
             return res.status(400).json({
                 status: "error",
@@ -1437,9 +1440,22 @@ app.post("/api/event-media", verifyToken, async (req, res) => {
             });
         }
 
-        await conn.beginTransaction();
+        // -----------------------------
+        // CHECK EVENT EXISTS
+        // -----------------------------
+        const [eventCheck] = await conn.execute(
+            "SELECT id FROM events WHERE id = ? LIMIT 1",
+            [event_id]
+        );
 
-        // nothing to save → just return success
+        if (eventCheck.length === 0) {
+            return res.status(404).json({
+                status: "error",
+                message: "Event not found"
+            });
+        }
+
+        // No media sent → success but do nothing
         if (!images && !videos && !banner_image) {
             return res.status(200).json({
                 status: "success",
@@ -1451,43 +1467,47 @@ app.post("/api/event-media", verifyToken, async (req, res) => {
         const videoList = videos ? videos.split(",") : [];
         const bannerList = banner_image ? [banner_image] : [];
 
-        // ------------------------------
+        await conn.beginTransaction();
+
+        // -----------------------------
         // SAVE IMAGES
-        // ------------------------------
+        // -----------------------------
         for (let url of imageList) {
-            if (!url.trim()) continue;
+            if (!url || !url.trim()) continue;
+
             await conn.execute(
-                `INSERT INTO event_media (event_id, media_type, media_url, created_at)
+                `INSERT INTO event_media (event_id, media_type, media_url, created_at) 
                  VALUES (?, 'image', ?, NOW())`,
                 [event_id, url.trim()]
             );
         }
 
-        // ------------------------------
+        // -----------------------------
         // SAVE VIDEOS
-        // ------------------------------
+        // -----------------------------
         for (let url of videoList) {
-            if (!url.trim()) continue;
+            if (!url || !url.trim()) continue;
+
             await conn.execute(
-                `INSERT INTO event_media (event_id, media_type, media_url, created_at)
+                `INSERT INTO event_media (event_id, media_type, media_url, created_at) 
                  VALUES (?, 'video', ?, NOW())`,
                 [event_id, url.trim()]
             );
         }
 
-        // ------------------------------
-        // BANNER IMAGE (ONLY ONE ALLOWED)
-        // ------------------------------
+        // -----------------------------
+        // SAVE BANNER IMAGE (ONLY ONE)
+        // -----------------------------
         if (bannerList.length > 0) {
 
-            // Delete old banner image for this event
+            // Delete old banner image
             await conn.execute(
                 `DELETE FROM event_media 
                  WHERE event_id = ? AND media_type = 'banner_image'`,
                 [event_id]
             );
 
-            // Insert new banner image
+            // Insert new one
             await conn.execute(
                 `INSERT INTO event_media (event_id, media_type, media_url, created_at)
                  VALUES (?, 'banner_image', ?, NOW())`,
@@ -1505,6 +1525,7 @@ app.post("/api/event-media", verifyToken, async (req, res) => {
     } catch (error) {
         await conn.rollback();
         console.error("Media Save Error:", error);
+
         return res.status(500).json({
             status: "error",
             message: "Server error",
