@@ -1287,5 +1287,139 @@ app.post("/api/events", verifyToken, async (req, res) => {
     }
 });
 
+
+// ---------------------------------------------
+// CREATE OR UPDATE EVENT INVITE
+// ---------------------------------------------
+app.post("/api/event-invites", verifyToken, async (req, res) => {
+    const conn = await db.getConnection();
+    try {
+        const {
+            invite_id,
+            event_id,
+            profile_id,
+            profile_type,
+            draft_set_times,
+            stage_name,
+            status,
+            confirmation,
+            notes_for_artist,
+            notes_for_venues
+        } = req.body;
+
+        // ---------------- VALIDATION ----------------
+        if (!event_id || !profile_id || !profile_type) {
+            return res.status(400).json({
+                status: "failed",
+                message: "event_id, profile_id and profile_type are required"
+            });
+        }
+
+        if (!["artist", "venue"].includes(profile_type)) {
+            return res.status(400).json({
+                status: "failed",
+                message: "profile_type must be 'artist' or 'venue'"
+            });
+        }
+
+        // Verify user owns the event
+        const [event] = await conn.execute(
+            "SELECT creator_user_id FROM events WHERE id = ? LIMIT 1",
+            [event_id]
+        );
+
+        if (event.length === 0) {
+            return res.status(404).json({
+                status: "failed",
+                message: "Event not found"
+            });
+        }
+
+        if (event[0].creator_user_id !== req.user.user_id) {
+            return res.status(403).json({
+                status: "failed",
+                message: "Unauthorized: Only event creator can invite"
+            });
+        }
+
+        await conn.beginTransaction();
+
+        // If invite_id is passed → UPDATE
+        if (invite_id) {
+            await conn.execute(
+                `UPDATE event_invites SET
+                    profile_id = ?, 
+                    profile_type = ?, 
+                    draft_set_times = ?, 
+                    stage_name = ?, 
+                    status = ?, 
+                    confirmation = ?, 
+                    notes_for_artist = ?, 
+                    notes_for_venues = ?, 
+                    updated_at = NOW()
+                WHERE id = ? AND event_id = ?`,
+                [
+                    profile_id,
+                    profile_type,
+                    draft_set_times,
+                    stage_name,
+                    status,
+                    confirmation,
+                    notes_for_artist,
+                    notes_for_venues,
+                    invite_id,
+                    event_id
+                ]
+            );
+
+            await conn.commit();
+
+            return res.status(200).json({
+                status: "success",
+                message: "Invite updated successfully",
+                invite_id
+            });
+        }
+
+        // Otherwise → CREATE NEW invite
+        const [result] = await conn.execute(
+            `INSERT INTO event_invites
+            (event_id, profile_id, profile_type, draft_set_times, stage_name, status, confirmation,
+             notes_for_artist, notes_for_venues, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+            [
+                event_id,
+                profile_id,
+                profile_type,
+                draft_set_times,
+                stage_name,
+                status || null,
+                confirmation || null,
+                notes_for_artist,
+                notes_for_venues
+            ]
+        );
+
+        await conn.commit();
+
+        return res.status(201).json({
+            status: "success",
+            message: "Invite created successfully",
+            invite_id: result.insertId
+        });
+
+    } catch (error) {
+        await conn.rollback();
+        console.error("Event Invite Error:", error);
+        return res.status(500).json({
+            status: "error",
+            message: "Server error",
+            error: error.message
+        });
+    } finally {
+        conn.release();
+    }
+});
+
 // ------------------------------------------------
 app.listen(3000, () => console.log("API running on http://localhost:3000"));
