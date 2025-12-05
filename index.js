@@ -1157,5 +1157,135 @@ app.get("/api/profile/social-links/:profile_id", verifyToken, async (req, res) =
     }
 });
 
+
+// ---------------------------------------------------------
+// CREATE EVENT
+// ---------------------------------------------------------
+app.post("/api/events", verifyToken, async (req, res) => {
+    const conn = await db.getConnection();
+
+    try {
+        const {
+            creator_user_id,
+            event_title,
+            where_to_host,
+            preferred_day,
+            start_date_and_time,
+            end_date_and_time,
+            type_of_event,
+            type_of_artist,
+            reason_for_event,
+            equipment_for_event,
+            open_artist_public_request,
+            event_manager_name,
+            event_manager_phone,
+            event_manager_email,
+            notes_for_artist,
+            notes_for_venues,
+            banner
+        } = req.body;
+
+        // ---------------------- VALIDATIONS ----------------------
+
+        if (!creator_user_id) {
+            return res.status(400).json({
+                status: "failed",
+                message: "creator_user_id is required"
+            });
+        }
+
+        // user can create only their own event
+        if (req.user.user_id !== creator_user_id) {
+            return res.status(403).json({
+                status: "failed",
+                message: "Unauthorized: You can create only your own event"
+            });
+        }
+
+        if (!event_title || event_title.trim() === "") {
+            return res.status(400).json({
+                status: "failed",
+                message: "event_title is required"
+            });
+        }
+
+        if (!where_to_host) {
+            return res.status(400).json({
+                status: "failed",
+                message: "where_to_host is required"
+            });
+        }
+
+        if (!preferred_day) {
+            return res.status(400).json({
+                status: "failed",
+                message: "preferred_day is required"
+            });
+        }
+
+        // Date validation
+        if (!start_date_and_time) {
+            return res.status(400).json({
+                status: "failed",
+                message: "start_date_and_time is required"
+            });
+        }
+
+        await conn.beginTransaction();
+
+        // ---------------------- INSERT EVENT ----------------------
+        const [result] = await conn.execute(
+            `INSERT INTO events (
+                creator_user_id, event_title, where_to_host, preferred_day,
+                start_date_and_time, end_date_and_time, type_of_event,
+                type_of_artist, reason_for_event, equipment_for_event,
+                open_artist_public_request, event_manager_name,
+                event_manager_phone, event_manager_email, notes_for_artist,
+                notes_for_venues, banner, created_at, updated_at
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW()
+            )`,
+            [
+                creator_user_id,
+                event_title,
+                where_to_host,
+                preferred_day,
+                start_date_and_time,
+                end_date_and_time,
+                type_of_event,
+                type_of_artist,
+                reason_for_event,
+                equipment_for_event,
+                open_artist_public_request ?? 0,
+                event_manager_name,
+                event_manager_phone,
+                event_manager_email,
+                notes_for_artist,
+                notes_for_venues,
+                banner
+            ]
+        );
+
+        await conn.commit();
+
+        return res.status(200).json({
+            success: true,
+            message: "Event created successfully",
+            event_id: result.insertId
+        });
+
+    } catch (error) {
+        await conn.rollback();
+        console.error("Create Event Error:", error);
+        return res.status(500).json({
+            status: "error",
+            message: "Server error",
+            error: error.message
+        });
+    } finally {
+        conn.release();
+    }
+});
+
 // ------------------------------------------------
 app.listen(3000, () => console.log("API running on http://localhost:3000"));
