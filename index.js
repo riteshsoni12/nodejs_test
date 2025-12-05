@@ -1536,5 +1536,93 @@ app.post("/api/event-media", verifyToken, async (req, res) => {
     }
 });
 
+
+
+// ---------------------------------------------
+// SAVE EVENT Tickets
+// ---------------------------------------------
+app.post("/api/event-tickets", verifyToken, async (req, res) => {
+    const conn = await db.getConnection();
+
+    try {
+        const { event_id, tickets } = req.body;
+
+        // -----------------------------
+        // VALIDATION
+        // -----------------------------
+        if (!event_id) {
+            return res.status(400).json({
+                status: "error",
+                message: "event_id is required"
+            });
+        }
+
+        if (!tickets || !Array.isArray(tickets) || tickets.length === 0) {
+            return res.status(400).json({
+                status: "error",
+                message: "tickets array is required"
+            });
+        }
+
+        // -----------------------------
+        // CHECK EVENT EXISTS
+        // -----------------------------
+        const [eventCheck] = await conn.execute(
+            "SELECT id FROM events WHERE id = ? LIMIT 1",
+            [event_id]
+        );
+
+        if (eventCheck.length === 0) {
+            return res.status(404).json({
+                status: "error",
+                message: "Event not found"
+            });
+        }
+
+        await conn.beginTransaction();
+
+        // -----------------------------
+        // INSERT TICKETS
+        // -----------------------------
+        for (let t of tickets) {
+            const { ticket_date, ticket_type, ticket_price, visibility, location } = t;
+
+            await conn.execute(
+                `INSERT INTO event_tickets 
+                (event_id, ticket_date, ticket_type, ticket_price, visibility, location, created_at) 
+                VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+                [
+                    event_id,
+                    ticket_date || null,
+                    ticket_type || null,
+                    ticket_price || 0,
+                    visibility || 0,
+                    location || null
+                ]
+            );
+        }
+
+        await conn.commit();
+
+        return res.status(200).json({
+            status: "success",
+            message: "Event tickets saved successfully"
+        });
+
+    } catch (error) {
+        await conn.rollback();
+        console.error("Ticket Save Error:", error);
+
+        return res.status(500).json({
+            status: "error",
+            message: "Server error",
+            error: error.message
+        });
+    } finally {
+        conn.release();
+    }
+});
+
+
 // ------------------------------------------------
 app.listen(3000, () => console.log("API running on http://localhost:3000"));
