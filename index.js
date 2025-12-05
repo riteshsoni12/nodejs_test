@@ -255,9 +255,9 @@ app.post("/api/login", async (req, res) => {
 });
 
 
-// -------------------------------
+// -----------------------------------------------------
 // SAVE or UPDATE EPK
-// -------------------------------
+// -----------------------------------------------------
 app.post("/api/epk", verifyToken, async (req, res) => {
     const conn = await db.getConnection();
     try {
@@ -265,8 +265,6 @@ app.post("/api/epk", verifyToken, async (req, res) => {
             user_id,
             logo,
             banner,
-            images,
-            videos,
             bio,
             website_url,
             instagram_url,
@@ -274,10 +272,12 @@ app.post("/api/epk", verifyToken, async (req, res) => {
             youtube_url,
             spotify_url,
             epk_url,
-            other_url
+            other_url,
+            images, // now expected as ARRAY
+            videos  // now expected as ARRAY
         } = req.body;
 
-        // -------- VALIDATIONS ---------
+        // ------------ VALIDATION ---------------
         if (!user_id) {
             return res.status(400).json({
                 status: "failed",
@@ -285,14 +285,6 @@ app.post("/api/epk", verifyToken, async (req, res) => {
             });
         }
 
-        if (typeof bio !== "string") {
-            return res.status(400).json({
-                status: "failed",
-                message: "bio must be a string"
-            });
-        }
-
-        // Ensure user updates their own EPK
         if (req.user.user_id !== user_id) {
             return res.status(403).json({
                 status: "failed",
@@ -300,8 +292,15 @@ app.post("/api/epk", verifyToken, async (req, res) => {
             });
         }
 
-        const imageList = images ? images.split(",") : [];
-        const videoList = videos ? videos.split(",") : [];
+        if (bio && typeof bio !== "string") {
+            return res.status(400).json({
+                status: "failed",
+                message: "bio must be a string"
+            });
+        }
+
+        const imageList = Array.isArray(images) ? images : [];
+        const videoList = Array.isArray(videos) ? videos : [];
 
         await conn.beginTransaction();
 
@@ -314,7 +313,7 @@ app.post("/api/epk", verifyToken, async (req, res) => {
         let epkId;
 
         if (existing.length > 0) {
-            // ----------- UPDATE MAIN EPK TABLE -----------
+            // -------- UPDATE MAIN EPK --------
             epkId = existing[0].id;
 
             await conn.execute(
@@ -333,7 +332,7 @@ app.post("/api/epk", verifyToken, async (req, res) => {
             );
 
         } else {
-            // ----------- INSERT MAIN EPK TABLE -----------
+            // -------- INSERT MAIN EPK --------
             const [result] = await conn.execute(
                 `INSERT INTO epk 
                 (user_id, logo, banner, bio, website_url, instagram_url, facebook_url, 
@@ -349,7 +348,7 @@ app.post("/api/epk", verifyToken, async (req, res) => {
             epkId = result.insertId;
         }
 
-        // ----------- IMAGES -----------
+        // -------- IMAGES --------
         await conn.execute("DELETE FROM epk_images WHERE epk_id = ?", [epkId]);
         for (const url of imageList) {
             await conn.execute(
@@ -358,7 +357,7 @@ app.post("/api/epk", verifyToken, async (req, res) => {
             );
         }
 
-        // ----------- VIDEOS -----------
+        // -------- VIDEOS --------
         await conn.execute("DELETE FROM epk_videos WHERE epk_id = ?", [epkId]);
         for (const url of videoList) {
             await conn.execute(
@@ -371,13 +370,13 @@ app.post("/api/epk", verifyToken, async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            message: existing.length > 0 ? "EPK updated successfully" : "EPK saved successfully",
+            message: existing.length > 0 ? "EPK updated successfully" : "EPK created successfully",
             epk_id: epkId
         });
 
     } catch (error) {
         await conn.rollback();
-        console.error("EPK Save Error:", error);
+        console.error("EPK Error:", error);
         return res.status(500).json({
             status: "error",
             message: "Server error",
