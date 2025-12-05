@@ -1083,5 +1083,80 @@ app.get("/api/profile/media/:profile_id", verifyToken, async (req, res) => {
 });
 
 
+// ----------------------------------------------------------
+// GET PROFILE SOCIAL LINKS
+// ----------------------------------------------------------
+app.get("/api/profile/social-links/:profile_id", verifyToken, async (req, res) => {
+    try {
+        const profile_id = req.params.profile_id;
+
+        // Validate profile_id
+        if (!profile_id || isNaN(profile_id)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid or missing profile_id"
+            });
+        }
+
+        // 1. Verify profile exists and ownership
+        const [profileRows] = await db.query(
+            "SELECT user_id FROM profile WHERE id = ? LIMIT 1",
+            [profile_id]
+        );
+
+        if (profileRows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Profile not found"
+            });
+        }
+
+        const profileOwnerId = profileRows[0].user_id;
+
+        // Ownership check
+        if (profileOwnerId !== req.user.user_id) {
+            return res.status(403).json({
+                success: false,
+                message: "Unauthorized: You can access only your own profile social links"
+            });
+        }
+
+        // 2. Fetch social media links
+        const [linkRows] = await db.query(
+            `SELECT 
+                id, website_url, instagram_url, facebook_url, youtube_url, 
+                spotify_url, tiktok_url, twitter_url, other_url, 
+                created_at, updated_at
+             FROM profile_social_links
+             WHERE profile_id = ?
+             LIMIT 1`,
+            [profile_id]
+        );
+
+        // If no social links found, return empty object
+        if (linkRows.length === 0) {
+            return res.status(200).json({
+                success: true,
+                message: "No social links found",
+                social_links: {}
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Profile social links fetched successfully",
+            social_links: linkRows[0]
+        });
+
+    } catch (error) {
+        console.error("Social Links Fetch Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error",
+            error: error.message
+        });
+    }
+});
+
 // ------------------------------------------------
 app.listen(3000, () => console.log("API running on http://localhost:3000"));
