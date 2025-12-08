@@ -1930,5 +1930,94 @@ app.post("/api/collab-requests", verifyToken, async (req, res) => {
 });
 
 
+
+// ---------------------------------------------
+// GET user profile form filter value
+// ---------------------------------------------
+app.get("/api/profiles", verifyToken, async (req, res) => {
+    try {
+        const { account_type, name, genre, location } = req.query;
+
+        let sql = `
+            SELECT 
+                id,
+                user_id,
+                account_type,
+                first_name,
+                last_name,
+                stage_name,
+                company_name,
+                profile_photo,
+                genre,
+                location,
+                bio,
+                created_at,
+                updated_at
+            FROM profile
+            WHERE 1=1
+        `;
+
+        let params = [];
+
+        // Filter by account type
+        if (account_type) {
+            sql += " AND account_type = ?";
+            params.push(account_type);
+        }
+
+        // Filter by name (first_name, last_name, stage_name, company_name)
+        if (name) {
+            sql += `
+                AND (
+                    first_name LIKE ? OR
+                    last_name LIKE ? OR
+                    stage_name LIKE ? OR
+                    company_name LIKE ?
+                )
+            `;
+            params.push(`%${name}%`, `%${name}%`, `%${name}%`, `%${name}%`);
+        }
+
+        // Filter by genre
+        if (genre) {
+            sql += " AND genre LIKE ?";
+            params.push(`%${genre}%`);
+        }
+
+        // Filter by location
+        if (location) {
+            sql += " AND location LIKE ?";
+            params.push(`%${location}%`);
+        }
+
+        // Execute SQL
+        db.query(sql, params, (err, results) => {
+            if (err) {
+                console.log(err);
+                return res.status(500).json({
+                    success: false,
+                    message: "Database error",
+                    error: err
+                });
+            }
+
+            return res.json({
+                success: true,
+                total: results.length,
+                data: results
+            });
+        });
+
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error
+        });
+    }
+});
+
+
 // ------------------------------------------------
 app.listen(3000, () => console.log("API running on http://localhost:3000"));
