@@ -1738,5 +1738,66 @@ app.get("/api/event-media/:event_id", verifyToken, async (req, res) => {
 });
 
 
+
+// ---------------------------------------------
+// GET EVENT tickets
+// ---------------------------------------------
+app.get("/api/event-tickets/:event_id", verifyToken, async (req, res) => {
+    const conn = await db.getConnection();
+
+    try {
+        const event_id = req.params.event_id;
+
+        if (!event_id) {
+            return res.status(400).json({
+                status: "error",
+                message: "event_id is required"
+            });
+        }
+
+        // --------------------------------------------
+        // CHECK EVENT EXISTS
+        // --------------------------------------------
+        const [eventRows] = await conn.execute(
+            "SELECT id FROM events WHERE id = ? LIMIT 1",
+            [event_id]
+        );
+
+        if (eventRows.length === 0) {
+            return res.status(404).json({
+                status: "error",
+                message: "Event not found"
+            });
+        }
+
+        // --------------------------------------------
+        // GET ALL TICKETS FOR EVENT
+        // --------------------------------------------
+        const [ticketRows] = await conn.execute(
+            `SELECT id, event_id, ticket_date, ticket_type, ticket_price, visibility, location, created_at, updated_at
+             FROM event_tickets 
+             WHERE event_id = ?
+             ORDER BY ticket_date ASC, id DESC`,
+            [event_id]
+        );
+
+        return res.status(200).json({
+            status: "success",
+            event_id,
+            tickets: ticketRows
+        });
+
+    } catch (error) {
+        console.error("Get Event Tickets Error:", error);
+        return res.status(500).json({
+            status: "error",
+            message: "Server error",
+            error: error.message
+        });
+    } finally {
+        conn.release();
+    }
+});
+
 // ------------------------------------------------
 app.listen(3000, () => console.log("API running on http://localhost:3000"));
