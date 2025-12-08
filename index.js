@@ -1973,7 +1973,7 @@ app.get("/api/profiles", verifyToken, async (req, res) => {
             });
         });
 
-        return res.json({
+        return res.status(200).json({
             status: true,
             count: results.length,
             data: results
