@@ -1935,89 +1935,59 @@ app.post("/api/collab-requests", verifyToken, async (req, res) => {
 // GET user profile form filter value
 // ---------------------------------------------
 app.get("/api/profiles", verifyToken, async (req, res) => {
+    const { account_type, genre, location, search } = req.query;
+
     try {
-        const { account_type, name, genre, location } = req.query;
-
-        let sql = `
-            SELECT 
-                id,
-                user_id,
-                account_type,
-                first_name,
-                last_name,
-                stage_name,
-                company_name,
-                profile_photo,
-                genre,
-                location,
-                bio,
-                created_at,
-                updated_at
-            FROM profile
-            WHERE 1=1
-        `;
-
+        let sql = `SELECT * FROM profile WHERE 1=1`;
         let params = [];
 
-        // Filter by account type
+        // Filter by account_type (artist, promoter, venue)
         if (account_type) {
-            sql += " AND account_type = ?";
+            sql += ` AND account_type = ?`;
             params.push(account_type);
-        }
-
-        // Filter by name (first_name, last_name, stage_name, company_name)
-        if (name) {
-            sql += `
-                AND (
-                    first_name LIKE ? OR
-                    last_name LIKE ? OR
-                    stage_name LIKE ? OR
-                    company_name LIKE ?
-                )
-            `;
-            params.push(`%${name}%`, `%${name}%`, `%${name}%`, `%${name}%`);
         }
 
         // Filter by genre
         if (genre) {
-            sql += " AND genre LIKE ?";
+            sql += ` AND genre LIKE ?`;
             params.push(`%${genre}%`);
         }
 
         // Filter by location
         if (location) {
-            sql += " AND location LIKE ?";
+            sql += ` AND location LIKE ?`;
             params.push(`%${location}%`);
         }
 
-        // Execute SQL
-        db.query(sql, params, (err, results) => {
-            if (err) {
-                console.log(err);
-                return res.status(500).json({
-                    success: false,
-                    message: "Database error",
-                    error: err
-                });
-            }
+        // Search by stage_name OR company_name OR venue_name
+        if (search) {
+            sql += ` AND (stage_name LIKE ? OR company_name LIKE ? OR venue_name LIKE ?)`;
+            params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+        }
 
-            return res.json({
-                success: true,
-                total: results.length,
-                data: results
+        // Query wrapped in a promise for async/await
+        const results = await new Promise((resolve, reject) => {
+            db.query(sql, params, (err, data) => {
+                if (err) reject(err);
+                else resolve(data);
             });
         });
 
+        return res.json({
+            status: true,
+            count: results.length,
+            data: results
+        });
+
     } catch (error) {
-        console.log(error);
+        console.error("Error fetching profiles:", error);
         return res.status(500).json({
-            success: false,
-            message: "Server error",
-            error
+            status: false,
+            message: "Database error",
+            error: error.message
         });
     }
 });
-
 
 // ------------------------------------------------
 app.listen(3000, () => console.log("API running on http://localhost:3000"));
