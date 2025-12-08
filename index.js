@@ -1624,5 +1624,53 @@ app.post("/api/event-tickets", verifyToken, async (req, res) => {
 });
 
 
+// ---------------------------------------------
+// GET EVENT Details
+// ---------------------------------------------
+app.get("/api/events/:event_id", verifyToken, async (req, res) => {
+    const conn = await db.getConnection();
+
+    try {
+        const event_id = req.params.event_id;
+
+        if (!event_id) {
+            return res.status(400).json({
+                status: "error",
+                message: "event_id is required"
+            });
+        }
+
+        // -----------------------------
+        // FETCH EVENT DETAILS
+        // -----------------------------
+        const [eventRows] = await conn.execute(
+            "SELECT * FROM events WHERE id = ? LIMIT 1",
+            [event_id]
+        );
+
+        if (eventRows.length === 0) {
+            return res.status(404).json({
+                status: "error",
+                message: "Event not found"
+            });
+        }
+
+        return res.status(200).json({
+            status: "success",
+            event: eventRows[0]
+        });
+
+    } catch (error) {
+        console.error("Get Event Error:", error);
+        return res.status(500).json({
+            status: "error",
+            message: "Server error",
+            error: error.message
+        });
+    } finally {
+        conn.release();
+    }
+});
+
 // ------------------------------------------------
 app.listen(3000, () => console.log("API running on http://localhost:3000"));
