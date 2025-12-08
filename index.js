@@ -1862,5 +1862,73 @@ app.get("/api/event-invites/:event_id", verifyToken, async (req, res) => {
 });
 
 
+
+// ---------------------------------------------
+// Save collab request
+// ---------------------------------------------
+app.post("/api/collab-requests", verifyToken, async (req, res) => {
+    const conn = await db.getConnection();
+
+    try {
+        const { sender_user_id, receiver_user_id, message } = req.body;
+
+        // -------------------------------
+        // VALIDATION
+        // -------------------------------
+        if (!sender_user_id || !receiver_user_id) {
+            return res.status(400).json({
+                status: "error",
+                message: "sender_user_id and receiver_user_id are required"
+            });
+        }
+
+        // Ensure user is sending request from their own account
+        if (req.user.user_id !== sender_user_id) {
+            return res.status(403).json({
+                status: "error",
+                message: "Unauthorized: You can send requests only from your own account"
+            });
+        }
+
+        // Cannot send a request to yourself
+        if (sender_user_id === receiver_user_id) {
+            return res.status(400).json({
+                status: "error",
+                message: "You cannot send a request to yourself"
+            });
+        }
+
+        // -------------------------------
+        // INSERT INTO DATABASE
+        // -------------------------------
+        const [result] = await conn.execute(
+            `INSERT INTO collab_requests 
+                (sender_user_id, receiver_user_id, message, status, created_at, updated_at)
+             VALUES (?, ?, ?, 'pending', NOW(), NOW())`,
+            [sender_user_id, receiver_user_id, message || null]
+        );
+
+        const insertedId = result.insertId;
+
+        return res.status(200).json({
+            status: "success",
+            message: "Collaboration request sent successfully",
+            request_id: insertedId
+        });
+
+    } catch (error) {
+        console.error("Collab Request Error:", error);
+
+        return res.status(500).json({
+            status: "error",
+            message: "Server error",
+            error: error.message
+        });
+    } finally {
+        conn.release();
+    }
+});
+
+
 // ------------------------------------------------
 app.listen(3000, () => console.log("API running on http://localhost:3000"));
