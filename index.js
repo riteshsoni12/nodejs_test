@@ -1799,5 +1799,68 @@ app.get("/api/event-tickets/:event_id", verifyToken, async (req, res) => {
     }
 });
 
+
+// ---------------------------------------------
+// GET EVENT invites
+// ---------------------------------------------
+app.get("/api/event-invites/:event_id", verifyToken, async (req, res) => {
+    const conn = await db.getConnection();
+
+    try {
+        const event_id = req.params.event_id;
+
+        if (!event_id) {
+            return res.status(400).json({
+                status: "error",
+                message: "event_id is required"
+            });
+        }
+
+        // --------------------------------------------
+        // CHECK IF EVENT EXISTS
+        // --------------------------------------------
+        const [eventRows] = await conn.execute(
+            "SELECT id FROM events WHERE id = ? LIMIT 1",
+            [event_id]
+        );
+
+        if (eventRows.length === 0) {
+            return res.status(404).json({
+                status: "error",
+                message: "Event not found"
+            });
+        }
+
+        // --------------------------------------------
+        // GET EVENT INVITES
+        // --------------------------------------------
+        const [inviteRows] = await conn.execute(
+            `SELECT id, event_id, profile_id, profile_type, draft_set_times, stage_name, status, confirmation, 
+                    notes_for_artist, notes_for_venues, created_at, updated_at
+             FROM event_invites
+             WHERE event_id = ?
+             ORDER BY id DESC`,
+            [event_id]
+        );
+
+        return res.status(200).json({
+            status: "success",
+            event_id,
+            invites: inviteRows
+        });
+
+    } catch (error) {
+        console.error("Get Event Invites Error:", error);
+        return res.status(500).json({
+            status: "error",
+            message: "Server error",
+            error: error.message
+        });
+    } finally {
+        conn.release();
+    }
+});
+
+
 // ------------------------------------------------
 app.listen(3000, () => console.log("API running on http://localhost:3000"));
