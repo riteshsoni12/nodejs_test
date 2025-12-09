@@ -1161,7 +1161,7 @@ app.get("/api/profile/social-links/:profile_id", verifyToken, async (req, res) =
 // ---------------------------------------------------------
 // CREATE EVENT
 // ---------------------------------------------------------
-app.post("/api/events", verifyToken, async (req, res) => {
+app.post("/api/create-event", verifyToken, async (req, res) => {
     const conn = await db.getConnection();
 
     try {
@@ -1980,6 +1980,91 @@ app.get("/api/profiles", verifyToken, async (req, res) => {
     }
 });
 
+
+
+// ------------------------------------------------
+// GET EVENTS WITH OPTIONAL SEARCH/FILTERS (Protected)
+// ------------------------------------------------
+app.get("/api/events", verifyToken, async (req, res) => {
+    const {
+        search,                   // free text search
+        type_of_event,
+        type_of_artist,
+        preferred_day,
+        where_to_host,
+        open_artist_public_request // 0 or 1
+    } = req.query;
+
+    try {
+        let sql = "SELECT * FROM events WHERE 1=1";
+        const params = [];
+
+        // ---------- Global text search across main columns ----------
+        if (search) {
+            sql += `
+                AND (
+                    event_title LIKE ?
+                    OR where_to_host LIKE ?
+                    OR preferred_day LIKE ?
+                    OR type_of_event LIKE ?
+                    OR type_of_artist LIKE ?
+                    OR reason_for_event LIKE ?
+                    OR equipment_for_event LIKE ?
+                    OR event_manager_name LIKE ?
+                    OR event_manager_phone LIKE ?
+                    OR event_manager_email LIKE ?
+                )
+            `;
+            const s = `%${search}%`;
+            params.push(s, s, s, s, s, s, s, s, s, s);
+        }
+
+        // ---------- Extra filters ----------
+        if (type_of_event) {
+            sql += " AND type_of_event LIKE ?";
+            params.push(`%${type_of_event}%`);
+        }
+
+        if (type_of_artist) {
+            sql += " AND type_of_artist LIKE ?";
+            params.push(`%${type_of_artist}%`);
+        }
+
+        if (preferred_day) {
+            sql += " AND preferred_day LIKE ?";
+            params.push(`%${preferred_day}%`);
+        }
+
+        if (where_to_host) {
+            sql += " AND where_to_host LIKE ?";
+            params.push(`%${where_to_host}%`);
+        }
+
+        if (open_artist_public_request !== undefined) {
+            sql += " AND open_artist_public_request = ?";
+            params.push(open_artist_public_request); // "0" or "1"
+        }
+
+        // Latest created first
+        sql += " ORDER BY created_at DESC";
+
+        const [rows] = await db.query(sql, params);
+
+        return res.json({
+            status: "success",
+            count: rows.length,
+            events: rows
+        });
+
+    } catch (err) {
+        console.error("Error fetching events:", err.message);
+        return res.status(500).json({
+            status: "error",
+            message: "Database error",
+            error: err.message
+        });
+    }
+});
 
 // ------------------------------------------------
 app.listen(3000, () => console.log("API running on http://localhost:3000"));
