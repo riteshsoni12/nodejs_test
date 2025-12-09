@@ -1179,9 +1179,7 @@ app.post("/api/create-event", verifyToken, async (req, res) => {
             open_artist_public_request,
             event_manager_name,
             event_manager_phone,
-            event_manager_email,
-            notes_for_artist,
-            notes_for_venues
+            event_manager_email
         } = req.body;
 
         // ---------------------- VALIDATIONS ----------------------
@@ -1239,10 +1237,9 @@ app.post("/api/create-event", verifyToken, async (req, res) => {
                 start_date_and_time, end_date_and_time, type_of_event,
                 type_of_artist, reason_for_event, equipment_for_event,
                 open_artist_public_request, event_manager_name,
-                event_manager_phone, event_manager_email, notes_for_artist,
-                notes_for_venues, banner, created_at, updated_at
+                event_manager_phone, event_manager_email, created_at, updated_at
             ) VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW()
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW()
             )`,
             [
                 creator_user_id,
@@ -1258,9 +1255,7 @@ app.post("/api/create-event", verifyToken, async (req, res) => {
                 open_artist_public_request ?? 0,
                 event_manager_name,
                 event_manager_phone,
-                event_manager_email,
-                notes_for_artist,
-                notes_for_venues
+                event_manager_email
             ]
         );
 
