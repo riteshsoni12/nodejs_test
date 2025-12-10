@@ -793,6 +793,55 @@ app.post("/api/profile", verifyToken, async (req, res) => {
 });
 
 
+// ---------------------------------------------
+// GET single user profile by profile_id
+// ---------------------------------------------
+app.get("/api/profile/:profile_id", verifyToken, async (req, res) => {
+    const profile_id = req.params.profile_id;
+
+    if (!profile_id) {
+        return res.status(400).json({
+            status: false,
+            message: "Profile ID is required"
+        });
+    }
+
+    try {
+        const sql = `SELECT * FROM profile WHERE id = ?`;
+        const params = [profile_id];
+
+        const result = await new Promise((resolve, reject) => {
+            db.query(sql, params, (err, data) => {
+                if (err) reject(err);
+                else resolve(data);
+            });
+        });
+
+        // If no profile found
+        if (result.length === 0) {
+            return res.status(404).json({
+                status: false,
+                message: "Profile not found"
+            });
+        }
+
+        return res.status(200).json({
+            status: true,
+            data: result[0]   // return only single row
+        });
+
+    } catch (error) {
+        console.error("Error fetching profile:", error);
+        return res.status(500).json({
+            status: false,
+            message: "Database error",
+            error: error.message
+        });
+    }
+});
+
+
+
 // --------------------------------------------------------------
 // ADD PROFILE MEDIA (images/videos)
 // --------------------------------------------------------------
