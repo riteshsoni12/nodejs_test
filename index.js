@@ -793,53 +793,65 @@ app.post("/api/profile", verifyToken, async (req, res) => {
 });
 
 
-// ---------------------------------------------
+// --------------------------------------------------
 // GET single user profile by profile_id
-// ---------------------------------------------
+// --------------------------------------------------
 app.get("/api/profile/:profile_id", verifyToken, async (req, res) => {
     const profile_id = req.params.profile_id;
 
-    if (!profile_id) {
+    if (!profile_id || isNaN(profile_id)) {
         return res.status(400).json({
             status: false,
-            message: "Profile ID is required"
+            message: "Valid profile ID is required"
         });
     }
 
     try {
-        const sql = `SELECT * FROM profile WHERE id = ?`;
+        // ✨ STEP 1: Fetch profile
+        const sql = `SELECT * FROM profile WHERE id = ? LIMIT 1`;
         const params = [profile_id];
 
-        const result = await new Promise((resolve, reject) => {
+        const profile = await new Promise((resolve, reject) => {
             db.query(sql, params, (err, data) => {
                 if (err) reject(err);
                 else resolve(data);
             });
         });
 
-        // If no profile found
-        if (result.length === 0) {
+        if (profile.length === 0) {
             return res.status(404).json({
                 status: false,
                 message: "Profile not found"
             });
         }
 
+        const profileData = profile[0];
+
+        // ✨ STEP 2: Ownership check
+        // Only allow logged-in user to access their own profile
+        if (profileData.user_id !== req.user.user_id) {
+            return res.status(403).json({
+                status: false,
+                message: "Unauthorized: You can access only your own profile"
+            });
+        }
+
+        // ✨ STEP 3: Return full profile
         return res.status(200).json({
             status: true,
-            data: result[0]   // return only single row
+            message: "Profile fetched successfully",
+            data: profileData
         });
 
     } catch (error) {
         console.error("Error fetching profile:", error);
         return res.status(500).json({
             status: false,
-            message: "Database error",
+            message: "Internal server error",
             error: error.message
         });
     }
 });
-
 
 
 // --------------------------------------------------------------
