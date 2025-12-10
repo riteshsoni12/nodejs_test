@@ -2102,5 +2102,51 @@ app.get("/api/events", verifyToken, async (req, res) => {
     }
 });
 
+
+// ------------------------------------------------
+// DELETE PROFILE MEDIA BY media_id (Protected)
+// ------------------------------------------------
+app.delete("/api/profile/media/:media_id", verifyToken, async (req, res) => {
+    try {
+        const { media_id } = req.params;
+
+        if (!media_id) {
+            return res.status(400).json({
+                status: "failed",
+                message: "media_id is required"
+            });
+        }
+
+        // Check if media exists
+        const [rows] = await db.query(
+            "SELECT * FROM profile_media WHERE id = ?",
+            [media_id]
+        );
+
+        if (rows.length === 0) {
+            return res.status(404).json({
+                status: "failed",
+                message: "Media not found"
+            });
+        }
+
+        // Delete media
+        await db.query("DELETE FROM profile_media WHERE id = ?", [media_id]);
+
+        return res.json({
+            status: "success",
+            message: "Media deleted successfully"
+        });
+
+    } catch (err) {
+        return res.status(500).json({
+            status: "error",
+            message: "Database error",
+            error: err.message
+        });
+    }
+});
+
+
 // ------------------------------------------------
 app.listen(3000, () => console.log("API running on http://localhost:3000"));
