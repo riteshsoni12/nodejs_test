@@ -1929,27 +1929,33 @@ app.get("/api/profiles", verifyToken, async (req, res) => {
 });
 
 
-
 // ------------------------------------------------
-// GET EVENTS WITH OPTIONAL SEARCH/FILTERS (Protected)
+// GET EVENTS WITH SEARCH / FILTERS / PAGINATION
 // ------------------------------------------------
 app.get("/api/events", verifyToken, async (req, res) => {
     const {
-        search,                   // free text search
+        search,                   // global text search
+        event_title,              // specific title search
         type_of_event,
         type_of_artist,
         preferred_day,
         where_to_host,
-        open_artist_public_request // 0 or 1
+        open_artist_public_request, // 0 or 1
+        from_date,                // YYYY-MM-DD
+        to_date,                  // YYYY-MM-DD
+        page = 1                  // pagination
     } = req.query;
 
+    const limit = 16;
+    const offset = (parseInt(page) - 1) * limit;
+
     try {
-        let sql = "SELECT * FROM events WHERE 1=1";
+        let whereSql = " WHERE 1=1 ";
         const params = [];
 
-        // ---------- Global text search across main columns ----------
+        // ---------- Global text search ----------
         if (search) {
-            sql += `
+            whereSql += `
                 AND (
                     event_title LIKE ?
                     OR where_to_host LIKE ?
@@ -1967,39 +1973,71 @@ app.get("/api/events", verifyToken, async (req, res) => {
             params.push(s, s, s, s, s, s, s, s, s, s);
         }
 
+        // ---------- Event title filter ----------
+        if (event_title) {
+            whereSql += " AND event_title LIKE ?";
+            params.push(`%${event_title}%`);
+        }
+
         // ---------- Extra filters ----------
         if (type_of_event) {
-            sql += " AND type_of_event LIKE ?";
+            whereSql += " AND type_of_event LIKE ?";
             params.push(`%${type_of_event}%`);
         }
 
         if (type_of_artist) {
-            sql += " AND type_of_artist LIKE ?";
+            whereSql += " AND type_of_artist LIKE ?";
             params.push(`%${type_of_artist}%`);
         }
 
         if (preferred_day) {
-            sql += " AND preferred_day LIKE ?";
+            whereSql += " AND preferred_day LIKE ?";
             params.push(`%${preferred_day}%`);
         }
 
         if (where_to_host) {
-            sql += " AND where_to_host LIKE ?";
+            whereSql += " AND where_to_host LIKE ?";
             params.push(`%${where_to_host}%`);
         }
 
         if (open_artist_public_request !== undefined) {
-            sql += " AND open_artist_public_request = ?";
-            params.push(open_artist_public_request); // "0" or "1"
+            whereSql += " AND open_artist_public_request = ?";
+            params.push(open_artist_public_request);
         }
 
-        // Latest created first
-        sql += " ORDER BY created_at DESC";
+        // ---------- Date range filter ----------
+        if (from_date) {
+            whereSql += " AND start_date_and_time >= ?";
+            params.push(`${from_date} 00:00:00`);
+        }
 
-        const [rows] = await db.query(sql, params);
+        if (to_date) {
+            whereSql += " AND start_date_and_time <= ?";
+            params.push(`${to_date} 23:59:59`);
+        }
+
+        // ---------- Total count ----------
+        const countSql = `SELECT COUNT(*) as total FROM events ${whereSql}`;
+        const [[{ total }]] = await db.query(countSql, params);
+
+        // ---------- Paginated data ----------
+        const dataSql = `
+            SELECT *
+            FROM events
+            ${whereSql}
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+        `;
+
+        const dataParams = [...params, limit, offset];
+        const [rows] = await db.query(dataSql, dataParams);
 
         return res.json({
             status: "success",
+            page: parseInt(page),
+            per_page: limit,
+            total,
+            total_pages: Math.ceil(total / limit),
             count: rows.length,
             events: rows
         });
