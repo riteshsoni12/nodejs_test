@@ -796,7 +796,7 @@ app.post("/api/profile", verifyToken, async (req, res) => {
 // ------------------------------------------------
 // GET SINGLE PROFILE BY ID (Protected)
 // ------------------------------------------------
-app.get("/api/profile/:profile_id/full", verifyToken, async (req, res) => {
+app.get("/api/profile/:profile_id", verifyToken, async (req, res) => {
     try {
         const { profile_id } = req.params;
 
