@@ -1879,41 +1879,67 @@ app.post("/api/collab-requests", verifyToken, async (req, res) => {
 
 
 // ------------------------------------------------
-// GET PROFILES WITH FILTERS (Protected)
+// GET PROFILES WITH FILTERS + PAGINATION (Protected)
 // ------------------------------------------------
 app.get("/api/profiles", verifyToken, async (req, res) => {
-    const { stage_name, genre, location, account_type } = req.query;
+    const {
+        stage_name,
+        genre,
+        location,
+        account_type,
+        page = 1
+    } = req.query;
+
+    const limit = 16;
+    const offset = (parseInt(page) - 1) * limit;
 
     try {
-        // Base query
-        let sql = "SELECT * FROM profile WHERE 1=1";
+        let whereSql = " WHERE 1=1 ";
         const params = [];
 
-        // Optional filters
+        // ---------- Filters ----------
         if (stage_name) {
-            sql += " AND stage_name LIKE ?";
+            whereSql += " AND stage_name LIKE ?";
             params.push(`%${stage_name}%`);
         }
 
         if (genre) {
-            sql += " AND genre LIKE ?";
+            whereSql += " AND genre LIKE ?";
             params.push(`%${genre}%`);
         }
 
         if (location) {
-            sql += " AND `location` LIKE ?";
+            whereSql += " AND `location` LIKE ?";
             params.push(`%${location}%`);
         }
 
         if (account_type) {
-            sql += " AND account_type LIKE ?";
+            whereSql += " AND account_type LIKE ?";
             params.push(`%${account_type}%`);
         }
 
-        const [rows] = await db.query(sql, params);
+        // ---------- Total count ----------
+        const countSql = `SELECT COUNT(*) AS total FROM profile ${whereSql}`;
+        const [[{ total }]] = await db.query(countSql, params);
+
+        // ---------- Paginated data ----------
+        const dataSql = `
+            SELECT *
+            FROM profile
+            ${whereSql}
+            ORDER BY id DESC
+            LIMIT ? OFFSET ?
+        `;
+
+        const dataParams = [...params, limit, offset];
+        const [rows] = await db.query(dataSql, dataParams);
 
         return res.json({
             status: "success",
+            page: parseInt(page),
+            per_page: limit,
+            total,
+            total_pages: Math.ceil(total / limit),
             count: rows.length,
             profiles: rows
         });
