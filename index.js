@@ -796,39 +796,87 @@ app.post("/api/profile", verifyToken, async (req, res) => {
 // ------------------------------------------------
 // GET SINGLE PROFILE BY ID (Protected)
 // ------------------------------------------------
-app.get("/api/profile/:profile_id", verifyToken, async (req, res) => {
+app.get("/api/profile/:profile_id/full", verifyToken, async (req, res) => {
     try {
         const { profile_id } = req.params;
 
-        if (!profile_id) {
+        // Validate profile_id
+        if (!profile_id || isNaN(profile_id)) {
             return res.status(400).json({
-                status: "failed",
-                message: "profile_id is required"
+                success: false,
+                message: "Invalid or missing profile_id"
             });
         }
 
-        const [rows] = await db.query(
-            "SELECT * FROM profile WHERE id = ?",
+        /* -------------------------------
+           1. Fetch profile + ownership
+        -------------------------------- */
+        const [profileRows] = await db.query(
+            "SELECT * FROM profile WHERE id = ? LIMIT 1",
             [profile_id]
         );
 
-        if (rows.length === 0) {
+        if (profileRows.length === 0) {
             return res.status(404).json({
-                status: "failed",
+                success: false,
                 message: "Profile not found"
             });
         }
 
-        return res.json({
-            status: "success",
-            profile: rows[0]
+        const profile = profileRows[0];
+
+        // Ownership check
+        if (profile.user_id !== req.user.user_id) {
+            return res.status(403).json({
+                success: false,
+                message: "Unauthorized: You can access only your own profile"
+            });
+        }
+
+        /* -------------------------------
+           2. Fetch profile media
+        -------------------------------- */
+        const [mediaRows] = await db.query(
+            `SELECT id, media_type, media_url, created_at
+             FROM profile_media
+             WHERE profile_id = ?
+             ORDER BY id DESC`,
+            [profile_id]
+        );
+
+        /* -------------------------------
+           3. Fetch social links
+        -------------------------------- */
+        const [socialRows] = await db.query(
+            `SELECT 
+                id, website_url, instagram_url, facebook_url, youtube_url,
+                spotify_url, tiktok_url, twitter_url, other_url,
+                created_at, updated_at
+             FROM profile_social_links
+             WHERE profile_id = ?
+             LIMIT 1`,
+            [profile_id]
+        );
+
+        /* -------------------------------
+           4. Response
+        -------------------------------- */
+        return res.status(200).json({
+            success: true,
+            message: "Profile data fetched successfully",
+            data: {
+                profile,
+                media: mediaRows || [],
+                social_links: socialRows.length ? socialRows[0] : {}
+            }
         });
 
-    } catch (err) {
+    } catch (error) {
+        console.error("Full Profile Fetch Error:", error);
         return res.status(500).json({
-            status: "error",
-            message: "Database error",
-            error: err.message
+            success: false,
+            message: "Internal Server Error",
+            error: error.message
         });
     }
 });
@@ -1054,142 +1102,6 @@ app.post("/api/profile/social-links", verifyToken, async (req, res) => {
 
     } catch (error) {
         console.error("Social Links Save Error:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Internal Server Error",
-            error: error.message
-        });
-    }
-});
-
-
-// ----------------------------------------------------------
-// GET PROFILE MEDIA (Images + Videos)
-// ----------------------------------------------------------
-app.get("/api/profile/media/:profile_id", verifyToken, async (req, res) => {
-    try {
-        const profile_id = req.params.profile_id;
-
-        // Validate profile_id
-        if (!profile_id || isNaN(profile_id)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid or missing profile_id"
-            });
-        }
-
-        // 1. Get profile and verify ownership
-        const [profileRows] = await db.query(
-            "SELECT user_id FROM profile WHERE id = ? LIMIT 1",
-            [profile_id]
-        );
-
-        if (profileRows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: "Profile not found"
-            });
-        }
-
-        // Ownership check
-        const profileOwnerId = profileRows[0].user_id;
-        if (profileOwnerId !== req.user.user_id) {
-            return res.status(403).json({
-                success: false,
-                message: "Unauthorized: You can access only your own profile media"
-            });
-        }
-
-        // 2. Fetch profile media
-        const [mediaRows] = await db.query(
-            "SELECT id, media_type, media_url, created_at FROM profile_media WHERE profile_id = ? ORDER BY id DESC",
-            [profile_id]
-        );
-
-        return res.status(200).json({
-            success: true,
-            message: "Profile media fetched successfully",
-            media: mediaRows
-        });
-
-    } catch (error) {
-        console.error("Profile Media Fetch Error:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Internal Server Error",
-            error: error.message
-        });
-    }
-});
-
-
-// ----------------------------------------------------------
-// GET PROFILE SOCIAL LINKS
-// ----------------------------------------------------------
-app.get("/api/profile/social-links/:profile_id", verifyToken, async (req, res) => {
-    try {
-        const profile_id = req.params.profile_id;
-
-        // Validate profile_id
-        if (!profile_id || isNaN(profile_id)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid or missing profile_id"
-            });
-        }
-
-        // 1. Verify profile exists and ownership
-        const [profileRows] = await db.query(
-            "SELECT user_id FROM profile WHERE id = ? LIMIT 1",
-            [profile_id]
-        );
-
-        if (profileRows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: "Profile not found"
-            });
-        }
-
-        const profileOwnerId = profileRows[0].user_id;
-
-        // Ownership check
-        if (profileOwnerId !== req.user.user_id) {
-            return res.status(403).json({
-                success: false,
-                message: "Unauthorized: You can access only your own profile social links"
-            });
-        }
-
-        // 2. Fetch social media links
-        const [linkRows] = await db.query(
-            `SELECT 
-                id, website_url, instagram_url, facebook_url, youtube_url, 
-                spotify_url, tiktok_url, twitter_url, other_url, 
-                created_at, updated_at
-             FROM profile_social_links
-             WHERE profile_id = ?
-             LIMIT 1`,
-            [profile_id]
-        );
-
-        // If no social links found, return empty object
-        if (linkRows.length === 0) {
-            return res.status(200).json({
-                success: true,
-                message: "No social links found",
-                social_links: {}
-            });
-        }
-
-        return res.status(200).json({
-            success: true,
-            message: "Profile social links fetched successfully",
-            social_links: linkRows[0]
-        });
-
-    } catch (error) {
-        console.error("Social Links Fetch Error:", error);
         return res.status(500).json({
             success: false,
             message: "Internal Server Error",
