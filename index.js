@@ -160,9 +160,8 @@ app.get("/api/users", verifyToken, async (req, res) => {
 app.post("/api/signup", upload.single("profile_pic"), async (req, res) => {
     try {
 
-        console.log("Upload dir:", UPLOAD_DIR);
-        console.log("File saved:", req.file?.path);
-
+        //console.log("Upload dir:", UPLOAD_DIR);
+        //console.log("File saved:", req.file?.path);
 
         const {
             name,
@@ -209,7 +208,9 @@ app.post("/api/signup", upload.single("profile_pic"), async (req, res) => {
         // ----------------------------
         let profilePicPath = null;
         if (req.file) {
-            profilePicPath = `assets/images/${req.file.filename}`;
+            // NEW - store filename only
+            const profilePic = req.file ? req.file.filename : null;
+
         }
 
         // ----------------------------
@@ -225,7 +226,7 @@ app.post("/api/signup", upload.single("profile_pic"), async (req, res) => {
                 dob || null,
                 user_type,
                 hashedPassword,
-                profilePicPath,
+                profilePic,          // ✅ filename only
                 location || null,
                 preferred_music || null,
                 "offline"
