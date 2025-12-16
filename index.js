@@ -37,6 +37,11 @@ const upload = multer({
     limits: { fileSize: 5 * 1024 * 1024 } // 5MB
 });
 
+// Serve uploaded images
+app.use(
+    "/assets/images",
+    express.static(path.join(__dirname, "assets/images"))
+);
 
 // --------------------------------------------
 // MySQL Connection (Hostinger DB via Render)
