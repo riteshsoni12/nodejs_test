@@ -3,10 +3,40 @@ const jwt = require("jsonwebtoken");
 const mysql = require("mysql2/promise");
 const bcrypt = require("bcryptjs");
 
+const multer = require("multer");
+const path = require("path");
+const { v4: uuidv4 } = require("uuid");
+
 const app = express();
 app.use(express.json());
 
 const JWT_SECRET = "OsCkXG75VhqWo";
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, "assets/images");
+    },
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname);
+        cb(null, `${uuidv4()}${ext}`);
+    }
+});
+
+const fileFilter = (req, file, cb) => {
+    const allowed = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
+    if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+    } else {
+        cb(new Error("Only image files are allowed"), false);
+    }
+};
+
+const upload = multer({
+    storage,
+    fileFilter,
+    limits: { fileSize: 5 * 1024 * 1024 } // 5MB
+});
+
 
 // --------------------------------------------
 // MySQL Connection (Hostinger DB via Render)
@@ -113,7 +143,7 @@ app.get("/api/users", verifyToken, async (req, res) => {
 // ------------------------------------------------
 // SIGNUP API
 // ------------------------------------------------
-app.post("/api/signup", async (req, res) => {
+app.post("/api/signup", upload.single("profile_pic"), async (req, res) => {
     try {
         const {
             name,
@@ -121,70 +151,79 @@ app.post("/api/signup", async (req, res) => {
             dob,
             user_type,
             password,
-            profile_pic,
             location,
             preferred_music
         } = req.body;
 
-        // 1. Validate required fields
-        if (!name || !email || !password) {
+        // ----------------------------
+        // Basic validation
+        // ----------------------------
+        if (!name || !email || !password || !user_type) {
             return res.status(400).json({
                 status: "failed",
-                message: "name, email and password are required"
+                message: "Required fields are missing"
             });
         }
 
-        // 2. Check for existing email
-        const [existingUser] = await db.query(
+        // ----------------------------
+        // Check if email exists
+        // ----------------------------
+        const [existing] = await db.query(
             "SELECT id FROM users WHERE email = ?",
             [email]
         );
 
-        if (existingUser.length > 0) {
-            return res.status(400).json({
+        if (existing.length > 0) {
+            return res.status(409).json({
                 status: "failed",
                 message: "Email already registered"
             });
         }
 
-        // 3. Hash password
+        // ----------------------------
+        // Hash password
+        // ----------------------------
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // 4. Insert user (NO profile creation, NO default profile update)
-        const [insertUser] = await db.query(
+        // ----------------------------
+        // Profile picture path
+        // ----------------------------
+        let profilePicPath = null;
+        if (req.file) {
+            profilePicPath = `assets/images/${req.file.filename}`;
+        }
+
+        // ----------------------------
+        // Insert user
+        // ----------------------------
+        const [result] = await db.query(
             `INSERT INTO users 
-            (name, email, dob, user_type, password, profile_pic, location, preferred_music, status, created_at, updated_at) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+            (name, email, dob, user_type, password, profile_pic, location, preferred_music, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 name,
                 email,
-                dob,
+                dob || null,
                 user_type,
                 hashedPassword,
-                profile_pic,
-                location,
-                preferred_music,
-                "online"
+                profilePicPath,
+                location || null,
+                preferred_music || null,
+                "offline"
             ]
         );
 
-        const user_id = insertUser.insertId;
-
-        // 5. Success response
-        return res.status(200).json({
+        return res.status(201).json({
             status: "success",
-            message: "Signup successful",
-            data: {
-                user_id: user_id
-            }
+            message: "User registered successfully",
+            user_id: result.insertId
         });
 
-    } catch (err) {
-        console.log("Signup Error:", err);
+    } catch (error) {
+        console.error("Signup error:", error.message);
         return res.status(500).json({
-            status: "error",
-            message: "Server error",
-            error: err.message
+            status: "failed",
+            message: "Internal server error"
         });
     }
 });
