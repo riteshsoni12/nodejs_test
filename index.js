@@ -209,8 +209,7 @@ app.post("/api/signup", upload.single("profile_pic"), async (req, res) => {
         let profilePic = null;
         if (req.file) {
             // NEW - store filename only
-            const profilePic = req.file ? req.file.filename : null;
-
+            profilePic = req.file ? req.file.filename : null;
         }
 
         // ----------------------------
