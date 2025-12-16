@@ -12,15 +12,23 @@ app.use(express.json());
 
 const JWT_SECRET = "OsCkXG75VhqWo";
 
+const UPLOAD_DIR = path.join(__dirname, "assets/images");
+
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, "assets/images");
+        cb(null, UPLOAD_DIR);
     },
     filename: (req, file, cb) => {
         const ext = path.extname(file.originalname);
         cb(null, `${uuidv4()}${ext}`);
     }
 });
+
+app.use(
+    "/assets/images",
+    express.static(UPLOAD_DIR)
+);
+
 
 const fileFilter = (req, file, cb) => {
     const allowed = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
@@ -37,11 +45,12 @@ const upload = multer({
     limits: { fileSize: 5 * 1024 * 1024 } // 5MB
 });
 
-// Serve uploaded images
-app.use(
-    "/assets/images",
-    express.static(path.join(__dirname, "assets/images"))
-);
+const fs = require("fs");
+
+if (!fs.existsSync(UPLOAD_DIR)) {
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
 
 // --------------------------------------------
 // MySQL Connection (Hostinger DB via Render)
@@ -150,6 +159,11 @@ app.get("/api/users", verifyToken, async (req, res) => {
 // ------------------------------------------------
 app.post("/api/signup", upload.single("profile_pic"), async (req, res) => {
     try {
+
+        console.log("Upload dir:", UPLOAD_DIR);
+        console.log("File saved:", req.file?.path);
+
+
         const {
             name,
             email,
