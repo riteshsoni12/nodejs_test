@@ -5,6 +5,7 @@ const bcrypt = require("bcryptjs");
 
 const multer = require("multer");
 const path = require("path");
+const fs = require("fs");
 const { v4: uuidv4 } = require("uuid");
 
 const app = express();
@@ -12,45 +13,59 @@ app.use(express.json());
 
 const JWT_SECRET = "OsCkXG75VhqWo";
 
-const UPLOAD_DIR = path.join(__dirname, "assets/images");
+const IMAGE_DIR = path.join(__dirname, "assets/images");
+const VIDEO_DIR = path.join(__dirname, "assets/videos");
 
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, UPLOAD_DIR);
-    },
-    filename: (req, file, cb) => {
-        const ext = path.extname(file.originalname);
-        cb(null, `${uuidv4()}${ext}`);
+[IMAGE_DIR, VIDEO_DIR].forEach(dir => {
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
     }
 });
 
-app.use(
-    "/assets/images",
-    express.static(UPLOAD_DIR)
-);
 
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        if (file.mimetype.startsWith("image/")) {
+            cb(null, IMAGE_DIR);
+        } else if (file.mimetype.startsWith("video/")) {
+            cb(null, VIDEO_DIR);
+        } else {
+            cb(new Error("Invalid file type"));
+        }
+    },
+    filename: (req, file, cb) => {
+        cb(null, `${uuidv4()}${path.extname(file.originalname)}`);
+    }
+});
 
 const fileFilter = (req, file, cb) => {
-    const allowed = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
-    if (allowed.includes(file.mimetype)) {
+    const allowedImages = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
+    const allowedVideos = ["video/mp4", "video/webm", "video/quicktime"];
+
+    if (
+        allowedImages.includes(file.mimetype) ||
+        allowedVideos.includes(file.mimetype)
+    ) {
         cb(null, true);
     } else {
-        cb(new Error("Only image files are allowed"), false);
+        cb(new Error("Only image or video files allowed"), false);
     }
 };
 
 const upload = multer({
     storage,
     fileFilter,
-    limits: { fileSize: 5 * 1024 * 1024 } // 5MB
+    limits: { fileSize: 50 * 1024 * 1024 } // 50MB
 });
 
-const fs = require("fs");
+app.use("/assets/images", express.static(IMAGE_DIR));
+app.use("/assets/videos", express.static(VIDEO_DIR));
 
-if (!fs.existsSync(UPLOAD_DIR)) {
-    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
-
+const profileUpload = upload.fields([
+    { name: "profile_image", maxCount: 1 },
+    { name: "banner_image", maxCount: 1 },
+    { name: "media_files", maxCount: 10 }
+]);
 
 // --------------------------------------------
 // MySQL Connection (Hostinger DB via Render)
@@ -159,10 +174,6 @@ app.get("/api/users", verifyToken, async (req, res) => {
 // ------------------------------------------------
 app.post("/api/signup", upload.single("profile_pic"), async (req, res) => {
     try {
-
-        //console.log("Upload dir:", UPLOAD_DIR);
-        //console.log("File saved:", req.file?.path);
-
         const {
             name,
             email,
@@ -173,9 +184,6 @@ app.post("/api/signup", upload.single("profile_pic"), async (req, res) => {
             preferred_music
         } = req.body;
 
-        // ----------------------------
-        // Basic validation
-        // ----------------------------
         if (!name || !email || !password || !user_type) {
             return res.status(400).json({
                 status: "failed",
@@ -183,9 +191,6 @@ app.post("/api/signup", upload.single("profile_pic"), async (req, res) => {
             });
         }
 
-        // ----------------------------
-        // Check if email exists
-        // ----------------------------
         const [existing] = await db.query(
             "SELECT id FROM users WHERE email = ?",
             [email]
@@ -198,23 +203,10 @@ app.post("/api/signup", upload.single("profile_pic"), async (req, res) => {
             });
         }
 
-        // ----------------------------
-        // Hash password
-        // ----------------------------
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // ----------------------------
-        // Profile picture path
-        // ----------------------------
-        let profilePic = null;
-        if (req.file) {
-            // NEW - store filename only
-            profilePic = req.file ? req.file.filename : null;
-        }
+        const profilePic = req.file ? req.file.filename : null;
 
-        // ----------------------------
-        // Insert user
-        // ----------------------------
         const [result] = await db.query(
             `INSERT INTO users 
             (name, email, dob, user_type, password, profile_pic, location, preferred_music, status)
@@ -225,22 +217,22 @@ app.post("/api/signup", upload.single("profile_pic"), async (req, res) => {
                 dob || null,
                 user_type,
                 hashedPassword,
-                profilePic,          // ✅ filename only
+                profilePic,
                 location || null,
                 preferred_music || null,
                 "offline"
             ]
         );
 
-        return res.status(201).json({
+        res.status(201).json({
             status: "success",
             message: "User registered successfully",
             user_id: result.insertId
         });
 
-    } catch (error) {
-        console.error("Signup error:", error.message);
-        return res.status(500).json({
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({
             status: "failed",
             message: "Internal server error"
         });
@@ -642,211 +634,86 @@ app.put("/api/update-user", verifyToken, async (req, res) => {
 // ----------------------------------------------------------
 // SAVE or UPDATE PROFILE (artist, promoter, venue)
 // ----------------------------------------------------------
-app.post("/api/profile", verifyToken, async (req, res) => {
+app.post("/api/profile", profileUpload, async (req, res) => {
+    const conn = await db.getConnection();
+
     try {
-        const {
-            user_id,
-            account_type, // artist | promoter | venue
+        const { user_id, account_type, ...profileData } = req.body;
 
-            // COMMON FIELDS
-            location,
-            stage_name,
-            fee_range,
-            bio,
-            profile_pic,
-            banner_pic,
-            willing_to_travel,
-            genre,
-            preferred_event_type,
-            email,
-            phone,
-
-            // CONTACT FIELDS
-            artist_contact_person,
-            promoter_contact_person,
-            venue_contact_person,
-            manager_email,
-            manager_phone,
-
-            // PROMOTER FIELDS
-            company_name,
-
-            // VENUE FIELDS
-            venue_name,
-            venue_capacity,
-            opening_hours,
-            type_of_venue,
-            venue_email,
-            venue_address,
-            venue_phone
-        } = req.body;
-
-        // ---------------------------
-        // 1. Validate required fields
-        // ---------------------------
         if (!user_id || !account_type) {
             return res.status(400).json({
-                success: false,
+                status: "failed",
                 message: "user_id and account_type are required"
             });
         }
 
-        // User can update only their own profile
-        if (req.user.user_id !== user_id) {
-            return res.status(403).json({
-                success: false,
-                message: "Unauthorized: You can update only your own profile"
-            });
-        }
+        await conn.beginTransaction();
 
-        // Validate account_type
-        const validTypes = ["artist", "promoter", "venue"];
-        if (!validTypes.includes(account_type)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid account_type"
-            });
-        }
-
-        // ---------------------------
-        // 2. Check if profile exists
-        // ---------------------------
-        const [existing] = await db.query(
-            `SELECT id FROM profile WHERE user_id = ? AND account_type = ? LIMIT 1`,
-            [user_id, account_type]
+        const [profileResult] = await conn.query(
+            `INSERT INTO profile (user_id, account_type, ${Object.keys(profileData).join(",")})
+             VALUES (?, ?, ${Object.keys(profileData).map(() => "?").join(",")})`,
+            [user_id, account_type, ...Object.values(profileData)]
         );
 
-        // ---------------------------
-        // 3. Build UPDATE field list
-        // ---------------------------
-        const updateFields = [];
-        const updateValues = [];
+        const profileId = profileResult.insertId;
 
-        const addUpdate = (column, value) => {
-            if (typeof value !== "undefined") {
-                updateFields.push(`${column} = ?`);
-                updateValues.push(value);
-            }
-        };
-
-        addUpdate("location", location);
-        addUpdate("stage_name", stage_name);
-        addUpdate("fee_range", fee_range);
-        addUpdate("bio", bio);
-        addUpdate("profile_pic", profile_pic);
-        addUpdate("banner_pic", banner_pic);
-        addUpdate("willing_to_travel", willing_to_travel);
-        addUpdate("genre", genre);
-        addUpdate("preferred_event_type", preferred_event_type);
-        addUpdate("email", email);
-        addUpdate("phone", phone);
-
-        addUpdate("artist_contact_person", artist_contact_person);
-        addUpdate("promoter_contact_person", promoter_contact_person);
-        addUpdate("venue_contact_person", venue_contact_person);
-        addUpdate("manager_email", manager_email);
-        addUpdate("manager_phone", manager_phone);
-
-        addUpdate("company_name", company_name);
-
-        addUpdate("venue_name", venue_name);
-        addUpdate("venue_capacity", venue_capacity);
-        addUpdate("opening_hours", opening_hours);
-        addUpdate("type_of_venue", type_of_venue);
-        addUpdate("venue_email", venue_email);
-        addUpdate("venue_address", venue_address);
-        addUpdate("venue_phone", venue_phone);
-
-        // ---------------------------
-        // 4. UPDATE if exists
-        // ---------------------------
-        if (existing.length > 0) {
-            const profileId = existing[0].id;
-
-            if (updateFields.length === 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: "No fields provided to update"
-                });
-            }
-
-            const sql = `
-                UPDATE profile SET ${updateFields.join(", ")}, updated_at = NOW()
-                WHERE id = ?
-            `;
-
-            await db.query(sql, [...updateValues, profileId]);
-
-            return res.status(200).json({
-                success: true,
-                message: `${account_type} profile updated successfully`,
-                profile_id: profileId
-            });
+        // Profile image
+        if (req.files?.profile_image) {
+            await conn.query(
+                "UPDATE profile SET profile_image = ? WHERE id = ?",
+                [req.files.profile_image[0].filename, profileId]
+            );
         }
 
-        // ---------------------------
-        // 5. INSERT new profile (FIXED)
-        // ---------------------------
-        const insertCols = ["user_id", "account_type"];
-        const insertVals = [user_id, account_type];
+        // Banner image
+        if (req.files?.banner_image) {
+            await conn.query(
+                "UPDATE profile SET banner_image = ? WHERE id = ?",
+                [req.files.banner_image[0].filename, profileId]
+            );
+        }
 
-        const maybeAdd = (column, value) => {
-            if (typeof value !== "undefined") {
-                insertCols.push(column);
-                insertVals.push(value);
+        // Media files
+        if (req.files?.media_files) {
+            for (const file of req.files.media_files) {
+                const type = file.mimetype.startsWith("video/") ? "video" : "image";
+                await conn.query(
+                    `INSERT INTO profile_media (profile_id, type, file_name)
+                     VALUES (?, ?, ?)`,
+                    [profileId, type, file.filename]
+                );
             }
-        };
+        }
 
-        maybeAdd("location", location);
-        maybeAdd("stage_name", stage_name);
-        maybeAdd("fee_range", fee_range);
-        maybeAdd("bio", bio);
-        maybeAdd("profile_pic", profile_pic);
-        maybeAdd("banner_pic", banner_pic);
-        maybeAdd("willing_to_travel", willing_to_travel);
-        maybeAdd("genre", genre);
-        maybeAdd("preferred_event_type", preferred_event_type);
-        maybeAdd("email", email);
-        maybeAdd("phone", phone);
+        // YouTube / Vimeo URLs
+        const urls = req.body["youtube_vimeo_urls[]"];
+        if (urls) {
+            for (const url of [].concat(urls)) {
+                await conn.query(
+                    `INSERT INTO profile_media (profile_id, type, youtube_vimeo_url)
+                     VALUES (?, 'video', ?)`,
+                    [profileId, url]
+                );
+            }
+        }
 
-        maybeAdd("artist_contact_person", artist_contact_person);
-        maybeAdd("promoter_contact_person", promoter_contact_person);
-        maybeAdd("venue_contact_person", venue_contact_person);
-        maybeAdd("manager_email", manager_email);
-        maybeAdd("manager_phone", manager_phone);
+        await conn.commit();
 
-        maybeAdd("company_name", company_name);
-
-        maybeAdd("venue_name", venue_name);
-        maybeAdd("venue_capacity", venue_capacity);
-        maybeAdd("opening_hours", opening_hours);
-        maybeAdd("type_of_venue", type_of_venue);
-        maybeAdd("venue_email", venue_email);
-        maybeAdd("venue_address", venue_address);
-        maybeAdd("venue_phone", venue_phone);
-
-        const placeholders = insertCols.map(() => "?").join(", ");
-
-        const sqlInsert = `
-            INSERT INTO profile (${insertCols.join(", ")}, created_at, updated_at)
-            VALUES (${placeholders}, NOW(), NOW())
-        `;
-
-        const [result] = await db.query(sqlInsert, insertVals);
-
-        return res.status(200).json({
-            success: true,
-            message: `${account_type} profile created successfully`,
-            profile_id: result.insertId
+        res.status(201).json({
+            status: "success",
+            message: "Profile created successfully",
+            profile_id: profileId
         });
 
-    } catch (error) {
-        console.error("Profile Save Error:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Server error",
-            error: error.message
+    } catch (err) {
+        await conn.rollback();
+        console.error(err);
+        res.status(500).json({
+            status: "failed",
+            message: "Internal server error"
         });
+    } finally {
+        conn.release();
     }
 });
 
